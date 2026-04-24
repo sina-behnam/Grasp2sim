@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./assets/mlog.svg" alt="grasp2sim logo" width="600"/>
+</p>
+
 # grasp2sim
 
 A MuJoCo-based simulation framework for evaluating **6-DoF grasp poses** from the [GraspNet-1Billion](https://graspnet.net) dataset using a Franka Emika Panda gripper.
