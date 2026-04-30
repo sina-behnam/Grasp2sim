@@ -1,6 +1,9 @@
 import os
 os.environ["MUJOCO_GL"] = "egl"
 
+import sys
+sys.path.append("/home/sbehnam/Project/grasp2sim")
+
 import numpy as np
 import mujoco
 import mediapy as media
@@ -8,10 +11,16 @@ from scipy.spatial.transform import Rotation as Rot
 from scipy.spatial.transform import Slerp
 from graspnetAPI import GraspGroup
 
+from poses.publisher import gg_filter_by_object_id
+
+from sim_logger import SimLogger
+
 # Config
 SCENE_XML   = "/home/sbehnam/Project/grasp2sim/scenes/scene_5-2_0000.xml"
-GRASPS_NPY  = "/home/sbehnam/Project/data/scenes/scene_0000/grasp_group_mine.npy"
-EXTR_NPY    = "/home/sbehnam/Project/data/cam0_wrt_table.npy"
+# GRASPS_NPY  = "/home/sbehnam/Project/data/scenes/scene_0000/grasp_group_mine.npy"
+GRASPS_NPY  = "/home/sbehnam/Project/data/scenes/scene_0000/some_banana_grasp.npy"  # smaller set for quick testing
+CAMERA_EXTR = "/home/sbehnam/Project/data/scenes/scene_0000/kinect/cam0_wrt_table.npy"
+CAMERA_POSE = "/home/sbehnam/Project/data/scenes/scene_0000/kinect/camera_poses.npy"
 
 LIFT_HEIGHT    = 0.08
 CAPTURE_EVERY  = 15
@@ -21,6 +30,7 @@ FINGER_BASE_Z      = 0.0584
 FINGERTIP_PAD_Z    = 0.0445
 FINGERTIP_PAD_HALF = 0.0085
 FINGERTIP_OFFSET   = FINGER_BASE_Z + FINGERTIP_PAD_Z + FINGERTIP_PAD_HALF
+# FINGERTIP_OFFSET = FINGER_BASE_Z + FINGERTIP_PAD_Z
 
 HOME_POS  = np.array([0.0, 0.0, 0.6])
 HOME_QUAT = np.array([1.0, 0.0, 0.0, 0.0])  # wxyz
@@ -32,16 +42,18 @@ def _xyzw_to_wxyz(q):  return np.array([q[3], q[0], q[1], q[2]])
 
 class GraspHand:
     """
-    Pattern C: hand base is KINEMATIC. Pose written to model.body_pos/body_quat.
-    Fingers + objects remain fully dynamic (freejoints, actuator, contact).
+    Simulated kinematic hand for grasp execution and evaluation in MuJoCo.
     """
 
     def __init__(self, scene_xml=SCENE_XML, grasps_npy=GRASPS_NPY,
-                 extr_npy=EXTR_NPY, render='human', camera=None):
+                 camera_extr=CAMERA_EXTR, camera_pose=CAMERA_POSE ,render='human', camera=None,
+                 debug=False, debug_log_every=1):
         self.model = mujoco.MjModel.from_xml_path(scene_xml)
         self.sim   = mujoco.MjData(self.model)
 
-        self.T_CAM2TABLE = np.load(extr_npy)
+        cam_2_table      = np.load(camera_extr)
+        camera_poses     = np.load(camera_pose)
+        self.T_CAM2TABLE = cam_2_table @ camera_poses[0]  # Always use the first camera pose !!!
         self.gg          = GraspGroup(np.load(grasps_npy))
 
         self.OBJ_BODY_NAMES = [f"obj_{i:03d}" for i in range(100)]
@@ -71,6 +83,16 @@ class GraspHand:
                 self.cam.lookat[:] = [0.0, -0.15, 0.0]
             else:
                 self.cam = camera
+
+        # Debug logging (off by default)
+        self.debug = debug
+        self.logger = SimLogger(self.model, self.sim,
+                                body_names=self.obj_names + ["hand"],
+                                log_every=debug_log_every) if debug else None
+
+    def _dlog(self):
+        if self.logger is not None:
+            self.logger.log()
 
     # Geometry
     def grasp_to_world(self, g):
@@ -118,11 +140,13 @@ class GraspHand:
             self.set_hand_pose(pos, quat)
             for _ in range(substeps):
                 mujoco.mj_step(self.model, self.sim)
+                self._dlog()
             if record and i % CAPTURE_EVERY == 0:
                 self.capture()
         # Settle: hold target pose, let fingers/objects reach equilibrium
         for j in range(settle_steps):
             mujoco.mj_step(self.model, self.sim)
+            self._dlog()
             if record and j % CAPTURE_EVERY == 0:
                 self.capture()
 
@@ -137,6 +161,7 @@ class GraspHand:
     def step(self, n, record=False):
         for i in range(n):
             mujoco.mj_step(self.model, self.sim)
+            self._dlog()
             if record and i % CAPTURE_EVERY == 0:
                 self.capture()
 
@@ -149,10 +174,12 @@ class GraspHand:
     # Reset at the start of every grasp trial
     def reset_scene(self):
         mujoco.mj_resetData(self.model, self.sim)
+        if self.logger is not None:
+            self.logger.reset()
         self.set_hand_pose(HOME_POS, HOME_QUAT)
         self.open_gripper(0.08)
-        # Let objects settle on the table under gravity
-        self.step(300)
+        # For stability, step the sim for a few frames before starting the grasp trial.
+        # self.step(300)
 
     # Single-grasp evaluation
     def run_grasp(self, g, executor, mode='slerp'):
@@ -233,7 +260,7 @@ def main():
 
     exe.gg.sort_by_score()
     # Pick grasps for a specific object (object_id is last column of grasp array)
-    one_obj_grasps = exe.gg[exe.gg.grasp_group_array[:, -1] == 5]
+    one_obj_grasps = gg_filter_by_object_id(exe.gg, object_id=5)
     test_grasps = one_obj_grasps.random_sample(min(50, len(one_obj_grasps)))
 
     print(f"Testing {len(test_grasps)} grasps | executor = {executor.__name__}")
