@@ -1,0 +1,10 @@
+/notebooks/*.ply
+/notebooks/*.stl
+/notebooks/*.obj
+/notebooks/*.pcd
+/notebooks/*.txt
+/notebooks/*.npy
+/notebooks/*.png
+
+*pyc
+__pycache__/*
