@@ -7,6 +7,7 @@ from graspnetAPI.utils.utils import get_obj_pose_list, generate_views, get_model
 from graspnetAPI.utils.rotation import batch_viewpoint_params_to_matrix
 from graspnetAPI import GraspGroup
 import open3d as o3d
+import copy
 
 TOTAL_SCENE_NUM = 190
 GRASP_HEIGHT = 0.02
@@ -110,16 +111,7 @@ def publish_grasp_labels(wanted_object_ids : list):
 
     return grasp_group
 
-def establish_geometry(grasp_group, cloud, num_grasp=4):
-    geometries = []
-    geometries.append(cloud)
-    interested_gg = grasp_group[grasp_group.grasp_group_array[:, -1] == 5]
-
-    sampled_grasp = interested_gg.random_sample(numGrasp=num_grasp)
-
-    geometries += sampled_grasp.to_open3d_geometry_list()
-
-def render_geometries_to_notebook(geometries, width=1280, height=720, shift_x=-0.2):
+def render_geometries_to_notebook(geometries, width=1280, height=720, shift_x=-0.2, save_path="scene.png"):
     renderer = o3d.visualization.rendering.OffscreenRenderer(width, height)
     renderer.scene.set_background([1, 1, 1, 1])
     
@@ -143,10 +135,17 @@ def render_geometries_to_notebook(geometries, width=1280, height=720, shift_x=-0
                           eye.astype(np.float32), up.astype(np.float32))
     
     img = renderer.render_to_image()
-    o3d.io.write_image("scene.png", img)
+    o3d.io.write_image(save_path, img)
     
     from IPython.display import Image
-    return Image("scene.png")
+    return Image(save_path)
 
+def gg_filter_by_object_id(grasps_group : GraspGroup, object_id) -> GraspGroup:
+
+    filtered_grasp_group_array = copy.deepcopy(grasps_group.grasp_group_array)
+
+    filter_grasp_group = GraspGroup(filtered_grasp_group_array[filtered_grasp_group_array[:, 16] == object_id])
+
+    return filter_grasp_group
 
     
