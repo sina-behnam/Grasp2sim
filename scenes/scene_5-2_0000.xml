@@ -144,8 +144,8 @@
           </tendon>
 
           <actuator>
-            <general class="panda" name="actuator8" tendon="split" forcerange="-100 100"
-                      ctrlrange="0 255" gainprm="0.01568627451 0 0" biasprm="0 -100 -10"/>
+            <general class="panda" name="actuator8" tendon="split" forcerange="-300 300"
+                      ctrlrange="0 255" gainprm="0.04 0 0" biasprm="0 -300 -30"/>
           </actuator>
 
         </mujoco>
