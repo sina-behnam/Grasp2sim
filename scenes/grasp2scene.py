@@ -1,4 +1,5 @@
 import os
+import glob
 import numpy as np
 from scipy.spatial.transform import Rotation
 from graspnetAPI.utils.xmlhandler import xmlReader
@@ -11,6 +12,7 @@ MODEL_DIR   = '/home/sbehnam/models'
 HAND_ASSETS = '/home/sbehnam/Project/grasp2sim/franka_emika_panda/assets'
 CAMERA      = 'kinect'
 OUTPUT_XML  = 'scene_0000.xml'
+
 
 class Scene:
     def __init__(self, scene_dir, model_dir, hand_assets, camera='kinect'):
@@ -35,10 +37,16 @@ class Scene:
     def get_obj_indexes(self):
         return [parse_posevector(pv)[0] for pv in self.posevectors]
 
-    def _build_obj_lines(self, obj_indexes=None):
+    def _coacd_parts(self, obj_str):
+        """Return sorted list of CoACD part files for an object, or [] if none."""
+        return sorted(glob.glob(os.path.join(
+            self.model_dir, obj_str, 'coacd_part_*.stl')))
+
+    def _build_obj_lines(self, obj_indexes=None, coacd=False):
         if isinstance(obj_indexes, int):
             obj_indexes = [obj_indexes]
         asset_lines, body_lines = [], []
+
         for pv in self.posevectors:
             obj_idx, obj_pose_cam = parse_posevector(pv)
             if obj_indexes is not None and obj_idx not in obj_indexes:
@@ -47,11 +55,45 @@ class Scene:
             obj_str = f'{obj_idx:03d}'
             t       = T[:3, 3]
             q       = self.mat_to_quat_wxyz(T)
-    
-            asset_lines.append(
-                f'<mesh name="mesh_obj_{obj_str}" file="{self.model_dir}/{obj_str}/textured.obj"/>'
-            )
-            body_lines.append(f'''
+
+            part_files = self._coacd_parts(obj_str) if coacd else []
+
+            if coacd and part_files:
+                # Visual mesh (full geometry, non-colliding)
+                asset_lines.append(
+                    f'    <mesh name="vis_obj_{obj_str}" file="{self.model_dir}/{obj_str}/textured.obj"/>'
+                )
+                # Collision parts (each convex piece)
+                geom_lines = [
+                    f'                  <geom type="mesh" mesh="vis_obj_{obj_str}" '
+                    f'contype="0" conaffinity="0" group="2"/>'
+                ]
+                for i, pf in enumerate(part_files):
+                    col_name = f'col_obj_{obj_str}_{i:02d}'
+                    asset_lines.append(
+                        f'    <mesh name="{col_name}" file="{pf}"/>'
+                    )
+                    geom_lines.append(
+                        f'                  <geom type="mesh" mesh="{col_name}" '
+                        f'contype="1" conaffinity="1" group="3" '
+                        f'friction="1.5 0.05 0.001" '
+                        f'solimp="0.99 0.999 0.001" solref="0.001 1" '
+                        f'condim="4"/>'
+                    )
+                body_lines.append(f'''
+                <body name="obj_{obj_str}" pos="{t[0]:.4f} {t[1]:.4f} {t[2]:.4f}"
+                      quat="{q[0]:.4f} {q[1]:.4f} {q[2]:.4f} {q[3]:.4f}">
+                  <joint type="free" damping="0.2"/>
+{chr(10).join(geom_lines)}
+                </body>''')
+            else:
+                # Single-mesh fallback (uses convex hull collision)
+                if coacd and not part_files:
+                    print(f'[warn] obj {obj_str}: no CoACD parts found, falling back to single mesh')
+                asset_lines.append(
+                    f'    <mesh name="mesh_obj_{obj_str}" file="{self.model_dir}/{obj_str}/textured.obj"/>'
+                )
+                body_lines.append(f'''
                 <body name="obj_{obj_str}" pos="{t[0]:.4f} {t[1]:.4f} {t[2]:.4f}"
                       quat="{q[0]:.4f} {q[1]:.4f} {q[2]:.4f} {q[3]:.4f}">
                   <joint type="free" damping="0.2"/>
@@ -63,8 +105,8 @@ class Scene:
                 </body>''')
         return asset_lines, body_lines
 
-    def shape_xml(self, obj_indexes=None):
-        asset_lines, body_lines = self._build_obj_lines(obj_indexes)
+    def shape_xml(self, obj_indexes=None, coacd=False):
+        asset_lines, body_lines = self._build_obj_lines(obj_indexes, coacd=coacd)
 
         xml = f"""<mujoco model="graspnet_scene_0000">
         <compiler angle="radian" meshdir="/" autolimits="true"/>
@@ -121,7 +163,7 @@ class Scene:
             <mesh name="finger_0" file="{self.hand_assets}/finger_0.obj"/>
             <mesh name="finger_1" file="{self.hand_assets}/finger_1.obj"/>
 
-            {chr(10).join(asset_lines)}
+{chr(10).join(asset_lines)}
         </asset>
 
         <worldbody>
@@ -203,30 +245,32 @@ class Scene:
           </tendon>
 
           <actuator>
-            <general class="panda" name="actuator8" tendon="split" forcerange="-100 100"
-                      ctrlrange="0 255" gainprm="0.01568627451 0 0" biasprm="0 -100 -10"/>
+            <general class="panda" name="actuator8" tendon="split" forcerange="-300 300"
+                      ctrlrange="0 255" gainprm="0.04 0 0" biasprm="0 -300 -30"/>
           </actuator>
 
         </mujoco>
         """
         return xml
 
-    def save_xml(self, output_path, obj_indexes=None):
+    def save_xml(self, output_path, obj_indexes=None, coacd=False):
         with open(output_path, 'w') as f:
-            f.write(self.shape_xml(obj_indexes))
-        print(f'Saved → {output_path}')
-
+            f.write(self.shape_xml(obj_indexes, coacd=coacd))
+        mode = 'with CoACD collision' if coacd else 'single-mesh collision'
+        print(f'Saved → {output_path}  ({mode})')
 
 
 def main():
-
     argparser = argparse.ArgumentParser(description='Generate MuJoCo XML for a GraspNet scene.')
-    argparser.add_argument('--scene-dir', type=str, default=GRASPNET_SCENE_ROOT, help='Path to the GraspNet scene directory (e.g., /path/to/scene_0000).')
-    argparser.add_argument('--model-dir', type=str, default=MODEL_DIR, help='Path to the directory containing object models (e.g., /path/to/models).')
-    argparser.add_argument('--hand-assets', type=str, default=HAND_ASSETS, help='Path to the directory containing hand asset files (e.g., /path/to/hand_assets).')
-    argparser.add_argument('--camera', type=str, default=CAMERA, help='Camera name to use (e.g., kinect).')
-    argparser.add_argument('--output-xml', type=str, default=OUTPUT_XML, help='Path to save the generated MuJoCo XML file (e.g., scene_0000.xml).')
-    argparser.add_argument('--obj-indexes', type=int, nargs='*', default=None, help='List of object indexes to include in the scene (e.g., --obj-indexes 0 1 2). If not specified, all objects will be included.')
+    argparser.add_argument('--scene-dir', type=str, default=GRASPNET_SCENE_ROOT)
+    argparser.add_argument('--model-dir', type=str, default=MODEL_DIR)
+    argparser.add_argument('--hand-assets', type=str, default=HAND_ASSETS)
+    argparser.add_argument('--camera', type=str, default=CAMERA)
+    argparser.add_argument('--output-xml', type=str, default=OUTPUT_XML)
+    argparser.add_argument('--obj-indexes', type=int, nargs='*', default=None,
+                           help='Object indexes to include (default: all)')
+    argparser.add_argument('--coacd', action='store_true',
+                           help='Use CoACD convex parts for collision (requires coacd_part_*.stl in each model dir)')
     args = argparser.parse_args()
 
     scene = Scene(
@@ -235,7 +279,8 @@ def main():
         hand_assets=args.hand_assets,
         camera=args.camera,
     )
-    scene.save_xml(args.output_xml, obj_indexes=args.obj_indexes)
-    
+    scene.save_xml(args.output_xml, obj_indexes=args.obj_indexes, coacd=args.coacd)
+
+
 if __name__ == '__main__':
     main()
