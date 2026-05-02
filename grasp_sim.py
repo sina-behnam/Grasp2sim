@@ -11,7 +11,7 @@ from scipy.spatial.transform import Rotation as Rot
 from scipy.spatial.transform import Slerp
 from graspnetAPI import GraspGroup
 
-from poses.publisher import gg_filter_by_object_id
+from utils.poses import gg_filter_by_object_id
 
 from sim_logger import SimLogger
 

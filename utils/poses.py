@@ -6,7 +6,6 @@ from graspnetAPI.utils.xmlhandler import xmlReader
 from graspnetAPI.utils.utils import get_obj_pose_list, generate_views, get_model_grasps, transform_points
 from graspnetAPI.utils.rotation import batch_viewpoint_params_to_matrix
 from graspnetAPI import GraspGroup
-import open3d as o3d
 import copy
 
 TOTAL_SCENE_NUM = 190
@@ -110,35 +109,6 @@ def publish_grasp_labels(wanted_object_ids : list):
         grasp_group.grasp_group_array = np.concatenate((grasp_group.grasp_group_array, obj_grasp_array))
 
     return grasp_group
-
-def render_geometries_to_notebook(geometries, width=1280, height=720, shift_x=-0.2, save_path="scene.png"):
-    renderer = o3d.visualization.rendering.OffscreenRenderer(width, height)
-    renderer.scene.set_background([1, 1, 1, 1])
-    
-    mat = o3d.visualization.rendering.MaterialRecord()
-    mat.shader = "defaultUnlit"
-    
-    for i, g in enumerate(geometries):
-        renderer.scene.add_geometry(f"geom_{i}", g, mat)
-    
-    bounds = o3d.geometry.AxisAlignedBoundingBox()
-    for g in geometries:
-        bounds += g.get_axis_aligned_bounding_box()
-    
-    center = bounds.get_center()
-    extent = bounds.get_extent()
-    look_at = center + np.array([extent[0] * shift_x, 0, 0])
-    eye = look_at + np.array([0, 0, -np.linalg.norm(extent) * 0.35])
-    up = np.array([0, 1, 0])
-    
-    renderer.setup_camera(60.0, look_at.astype(np.float32),
-                          eye.astype(np.float32), up.astype(np.float32))
-    
-    img = renderer.render_to_image()
-    o3d.io.write_image(save_path, img)
-    
-    from IPython.display import Image
-    return Image(save_path)
 
 def gg_filter_by_object_id(grasps_group : GraspGroup, object_id) -> GraspGroup:
 
