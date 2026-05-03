@@ -46,11 +46,11 @@ class Scene:
             obj_indexes = [obj_indexes]
         asset_lines, body_lines = [], []
 
-        OBJ_FRICTION = '1.0 0.05 0.001'
+        OBJ_FRICTION = '2.0 0.05 0.001'
         OBJ_SOLIMP   = '0.99 0.999 0.0001'
         OBJ_SOLREF   = '0.005 1'
         OBJ_CONDIM   = '4'
-        OBJ_DENSITY  = '50'
+        OBJ_DENSITY  = '500'
 
         for pv in self.posevectors:
             obj_idx, obj_pose_cam = parse_posevector(pv)
@@ -185,8 +185,7 @@ class Scene:
             <!-- Table -->
             <body name="table" pos="0 0 -0.01">
               <geom type="box" size="0.5 0.5 0.01" rgba="0.8 0.7 0.6 1"
-                    contype="1" conaffinity="1"
-                    friction="0.3 0.005 0.0001"/>
+                    contype="1" conaffinity="1"/>
             </body>
 
             <body name="marker_tw" mocap="true" pos="0 0 0">

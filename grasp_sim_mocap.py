@@ -1,4 +1,5 @@
 import os
+from turtle import width
 os.environ["MUJOCO_GL"] = "egl"
 
 import sys
@@ -16,8 +17,8 @@ from utils.poses import gg_filter_by_object_id
 from sim_logger import SimLogger
 
 # Config
-SCENE_XML   = "/home/sbehnam/Project/grasp2sim/scenes/scene_5-2_0000_mocap.xml"
-GRASPS_NPY  = "/home/sbehnam/Project/data/scenes/scene_0000/some_banana_grasp.npy"
+SCENE_XML   = "/home/sbehnam/Project/grasp2sim/scenes/scene_0000_mocap.xml"
+GRASPS_NPY  = "/home/sbehnam/Project/data/scenes/scene_0000/grasp_group_mine.npy"
 CAMERA_EXTR = "/home/sbehnam/Project/data/scenes/scene_0000/kinect/cam0_wrt_table.npy"
 CAMERA_POSE = "/home/sbehnam/Project/data/scenes/scene_0000/kinect/camera_poses.npy"
 
@@ -141,7 +142,7 @@ class GraspHandMocap:
                 self.sim.mocap_quat[self.mocap_idx].copy())
 
     def move_hand(self, target_pos, target_quat, n_steps,
-                  record=False, substeps=5, settle_steps=40, ease='cosine'):
+                  record=False, substeps=5, settle_steps=10, ease='cosine'):
         """
         Smoothly drive the mocap target from current pose to target.
         The weld constraint pulls the physical hand along each substep.
@@ -176,7 +177,7 @@ class GraspHandMocap:
         self.sim.ctrl[0] = (np.clip(width, 0.0, 0.08) / 0.08) * 255
 
     def close_gripper(self):
-        self.sim.ctrl[0] = -50
+        self.sim.ctrl[0] = 0
 
     # Stepping / rendering
     def step(self, n, record=False):
@@ -201,19 +202,20 @@ class GraspHandMocap:
         self.open_gripper(0.08)
 
     # Single-grasp evaluation
-    def run_grasp(self, g, executor, mode='slerp'):
+    def run_grasp(self, g, executor):
         t_w        = self.grasp_to_world(g)
         quat       = self.to_mujoco_quat(g.rotation_matrix)
         approach_w = self.T_CAM2TABLE[:3, :3] @ g.rotation_matrix[:, 0]
 
         self.reset_scene()
-        self.open_gripper(min(0.08, g.width + 0.015))
+        # self.open_gripper(min(0.08, g.width + 0.015))
+        self.open_gripper(0.08)
         self.step(30)
         self.capture()
 
         z0 = np.array([self.sim.xpos[oid][2] for oid in self.obj_ids])
 
-        executor(self, t_w, quat, mode=mode, approach_w=approach_w)
+        executor(self, t_w, quat, g.width, approach_w=approach_w)
 
         z1 = np.array([self.sim.xpos[oid][2] for oid in self.obj_ids])
         lift = z1 - z0
@@ -230,7 +232,7 @@ class Executors:
     """Grasp execution strategies for the mocap-weld hand."""
 
     @staticmethod
-    def teleport(exe: GraspHandMocap, t_w, quat, mode='slerp', approach_w=None):
+    def teleport(exe: GraspHandMocap, t_w, quat, width, approach_w=None):
         exe.set_hand_pose(t_w, quat)
         exe.capture()
         exe.step(30, record=True)
@@ -243,43 +245,50 @@ class Executors:
         exe.move_hand(lift_pos, quat, n_steps=200, record=True)
 
     @staticmethod
-    def descend(exe: GraspHandMocap, t_w, quat, mode='slerp',
-                approach_w=None, standoff=0.12):
+    def descend(exe: GraspHandMocap, t_w, quat, width, approach_w=None, standoff=0.12):
         if approach_w is None:
             approach_w = np.array([0.0, 0.0, -1.0])
         pre_t_w = t_w - standoff * approach_w
 
-        exe.move_hand(pre_t_w, quat, n_steps=200, record=True)
-        exe.move_hand(t_w, quat, n_steps=200, record=True, substeps=8)
+        exe.move_hand(pre_t_w, quat, n_steps=50, record=True)
+
+        exe.open_gripper(min(0.08, width + 0.015))   # small slack
+        exe.step(30)
+
+        exe.move_hand(t_w, quat, n_steps=80, record=True, substeps=5)
+
         exe.close_gripper()
-        exe.step(200, record=True)
-        exe.move_hand(pre_t_w, quat, n_steps=150, record=True)
-        exe.move_hand(pre_t_w + np.array([0.0, 0.0, 0.25]), quat,
-                      n_steps=200, record=True)
+        exe.step(80, record=True)
+
+        exe.move_hand(pre_t_w, quat, n_steps=80, record=True)
+        exe.move_hand(pre_t_w + np.array([0.0, 0.0, 0.25]), quat, n_steps=50, record=True)
 
 
 def main():
     exe = GraspHandMocap()
     executor   = Executors.descend
-    video_path = "test-mocap.mp4"
+    video_path = "test-mocap2.mp4"
 
-    exe.gg.sort_by_score()
-    one_obj_grasps = gg_filter_by_object_id(exe.gg, object_id=5)
-    test_grasps = one_obj_grasps.random_sample(min(50, len(one_obj_grasps)))
+    test_grasps = exe.gg.random_sample(10)
+
+    test_grasps.sort_by_score()
+
+    # one_obj_grasps = gg_filter_by_object_id(exe.gg, object_id=5)
+    # test_grasps = one_obj_grasps.random_sample(min(50, len(one_obj_grasps)))
 
     print(f"Testing {len(test_grasps)} grasps | executor = {executor.__name__}")
 
     results = []
     for rank in range(len(test_grasps)):
         g = test_grasps[rank]
-        t_w, lifted = exe.run_grasp(g, executor, mode='slerp')
+        t_w, lifted = exe.run_grasp(g, executor)
         success = len(lifted) > 0
         results.append((g.score, success, lifted))
-        print(f"[{rank+1}/{len(test_grasps)}] score={g.score:.3f} "
+        print(f"[{rank+1}/{len(test_grasps)}] score={g.score:.3f} object_id={g.object_id} "
               f"t_w={np.round(t_w, 3)}  "
               f"{'SUCCESS' if success else 'FAIL'}  lifted={lifted}")
 
-    exe.save_video(video_path)
+    exe.save_video(video_path, fps=5)
     n_ok = sum(1 for _, s, _ in results if s)
     print(f"Success rate: {n_ok}/{len(results)} = {100*n_ok/len(results):.1f}%")
 

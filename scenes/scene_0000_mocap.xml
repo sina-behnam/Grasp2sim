@@ -1,0 +1,433 @@
+<mujoco model="graspnet_scene_0000_mocap">
+        <compiler angle="radian" meshdir="/" autolimits="true"/>
+
+        <option integrator="implicitfast" impratio="10" cone="elliptic" timestep="0.002" noslip_iterations="3"/>
+
+        <visual>
+          <global offwidth="1280" offheight="720"/>
+        </visual>
+
+        <default>
+          <default class="panda">
+            <material specular="0.5" shininess="0.25"/>
+            <joint armature="0.1" damping="1" axis="0 0 1" range="-2.8973 2.8973"/>
+            <general dyntype="none" biastype="affine" ctrlrange="-2.8973 2.8973" forcerange="-87 87"/>
+            <default class="finger">
+              <joint axis="0 1 0" type="slide" range="0 0.04"/>
+            </default>
+            <default class="visual">
+              <geom type="mesh" contype="0" conaffinity="0" group="2"/>
+            </default>
+            <default class="collision">
+              <geom type="mesh" group="3" friction="5 1.0 0.1"/>
+              <default class="fingertip_pad_collision_1">
+                <geom type="box" size="0.0085 0.004 0.0085" pos="0 0.0055 0.0445"
+                      friction="5 1.0 0.1" condim="6"
+                      solimp="0.95 0.99 0.001" solref="0.005 1"/>
+              </default>
+              <default class="fingertip_pad_collision_2">
+                <geom type="box" size="0.003 0.002 0.003" pos="0.0055 0.002 0.05"
+                      friction="5 1.0 0.1" condim="6"
+                      solimp="0.95 0.99 0.001" solref="0.005 1"/>
+              </default>
+              <default class="fingertip_pad_collision_3">
+                <geom type="box" size="0.003 0.002 0.003" pos="-0.0055 0.002 0.05"
+                      friction="5 1.0 0.1" condim="6"
+                      solimp="0.95 0.99 0.001" solref="0.005 1"/>
+              </default>
+              <default class="fingertip_pad_collision_4">
+                <geom type="box" size="0.003 0.002 0.0035" pos="0.0055 0.002 0.0395"
+                      friction="5 1.0 0.1" condim="6"
+                      solimp="0.95 0.99 0.001" solref="0.005 1"/>
+              </default>
+              <default class="fingertip_pad_collision_5">
+                <geom type="box" size="0.003 0.002 0.0035" pos="-0.0055 0.002 0.0395"
+                      friction="5 1.0 0.1" condim="6"
+                      solimp="0.95 0.99 0.001" solref="0.005 1"/>
+              </default>
+            </default>
+          </default>
+        </default>
+
+        <asset>
+            <material class="panda" name="white"     rgba="1 1 1 1"/>
+            <material class="panda" name="off_white" rgba="0.901961 0.921569 0.929412 1"/>
+            <material class="panda" name="black"     rgba="0.25 0.25 0.25 1"/>
+
+            <mesh name="hand_c"   file="/home/sbehnam/Project/grasp2sim/franka_emika_panda/assets/hand.stl"/>
+            <mesh name="hand_0"   file="/home/sbehnam/Project/grasp2sim/franka_emika_panda/assets/hand_0.obj"/>
+            <mesh name="hand_1"   file="/home/sbehnam/Project/grasp2sim/franka_emika_panda/assets/hand_1.obj"/>
+            <mesh name="hand_2"   file="/home/sbehnam/Project/grasp2sim/franka_emika_panda/assets/hand_2.obj"/>
+            <mesh name="hand_3"   file="/home/sbehnam/Project/grasp2sim/franka_emika_panda/assets/hand_3.obj"/>
+            <mesh name="hand_4"   file="/home/sbehnam/Project/grasp2sim/franka_emika_panda/assets/hand_4.obj"/>
+            <mesh name="finger_0" file="/home/sbehnam/Project/grasp2sim/franka_emika_panda/assets/finger_0.obj"/>
+            <mesh name="finger_1" file="/home/sbehnam/Project/grasp2sim/franka_emika_panda/assets/finger_1.obj"/>
+
+    <mesh name="vis_obj_014" file="/home/sbehnam/models/014/textured.obj"/>
+    <mesh name="col_obj_014_00" file="/home/sbehnam/models/014/coacd_part_00.stl"/>
+    <mesh name="col_obj_014_01" file="/home/sbehnam/models/014/coacd_part_01.stl"/>
+    <mesh name="col_obj_014_02" file="/home/sbehnam/models/014/coacd_part_02.stl"/>
+    <mesh name="col_obj_014_03" file="/home/sbehnam/models/014/coacd_part_03.stl"/>
+    <mesh name="col_obj_014_04" file="/home/sbehnam/models/014/coacd_part_04.stl"/>
+    <mesh name="col_obj_014_05" file="/home/sbehnam/models/014/coacd_part_05.stl"/>
+    <mesh name="col_obj_014_06" file="/home/sbehnam/models/014/coacd_part_06.stl"/>
+    <mesh name="col_obj_014_07" file="/home/sbehnam/models/014/coacd_part_07.stl"/>
+    <mesh name="col_obj_014_08" file="/home/sbehnam/models/014/coacd_part_08.stl"/>
+    <mesh name="col_obj_014_09" file="/home/sbehnam/models/014/coacd_part_09.stl"/>
+    <mesh name="col_obj_014_10" file="/home/sbehnam/models/014/coacd_part_10.stl"/>
+    <mesh name="col_obj_014_11" file="/home/sbehnam/models/014/coacd_part_11.stl"/>
+    <mesh name="col_obj_014_12" file="/home/sbehnam/models/014/coacd_part_12.stl"/>
+    <mesh name="col_obj_014_13" file="/home/sbehnam/models/014/coacd_part_13.stl"/>
+    <mesh name="col_obj_014_14" file="/home/sbehnam/models/014/coacd_part_14.stl"/>
+    <mesh name="vis_obj_000" file="/home/sbehnam/models/000/textured.obj"/>
+    <mesh name="col_obj_000_00" file="/home/sbehnam/models/000/coacd_part_00.stl"/>
+    <mesh name="col_obj_000_01" file="/home/sbehnam/models/000/coacd_part_01.stl"/>
+    <mesh name="vis_obj_005" file="/home/sbehnam/models/005/textured.obj"/>
+    <mesh name="col_obj_005_00" file="/home/sbehnam/models/005/coacd_part_00.stl"/>
+    <mesh name="col_obj_005_01" file="/home/sbehnam/models/005/coacd_part_01.stl"/>
+    <mesh name="col_obj_005_02" file="/home/sbehnam/models/005/coacd_part_02.stl"/>
+    <mesh name="col_obj_005_03" file="/home/sbehnam/models/005/coacd_part_03.stl"/>
+    <mesh name="vis_obj_015" file="/home/sbehnam/models/015/textured.obj"/>
+    <mesh name="col_obj_015_00" file="/home/sbehnam/models/015/coacd_part_00.stl"/>
+    <mesh name="col_obj_015_01" file="/home/sbehnam/models/015/coacd_part_01.stl"/>
+    <mesh name="vis_obj_020" file="/home/sbehnam/models/020/textured.obj"/>
+    <mesh name="col_obj_020_00" file="/home/sbehnam/models/020/coacd_part_00.stl"/>
+    <mesh name="col_obj_020_01" file="/home/sbehnam/models/020/coacd_part_01.stl"/>
+    <mesh name="col_obj_020_02" file="/home/sbehnam/models/020/coacd_part_02.stl"/>
+    <mesh name="col_obj_020_03" file="/home/sbehnam/models/020/coacd_part_03.stl"/>
+    <mesh name="col_obj_020_04" file="/home/sbehnam/models/020/coacd_part_04.stl"/>
+    <mesh name="col_obj_020_05" file="/home/sbehnam/models/020/coacd_part_05.stl"/>
+    <mesh name="vis_obj_048" file="/home/sbehnam/models/048/textured.obj"/>
+    <mesh name="col_obj_048_00" file="/home/sbehnam/models/048/coacd_part_00.stl"/>
+    <mesh name="col_obj_048_01" file="/home/sbehnam/models/048/coacd_part_01.stl"/>
+    <mesh name="col_obj_048_02" file="/home/sbehnam/models/048/coacd_part_02.stl"/>
+    <mesh name="col_obj_048_03" file="/home/sbehnam/models/048/coacd_part_03.stl"/>
+    <mesh name="col_obj_048_04" file="/home/sbehnam/models/048/coacd_part_04.stl"/>
+    <mesh name="col_obj_048_05" file="/home/sbehnam/models/048/coacd_part_05.stl"/>
+    <mesh name="col_obj_048_06" file="/home/sbehnam/models/048/coacd_part_06.stl"/>
+    <mesh name="col_obj_048_07" file="/home/sbehnam/models/048/coacd_part_07.stl"/>
+    <mesh name="col_obj_048_08" file="/home/sbehnam/models/048/coacd_part_08.stl"/>
+    <mesh name="col_obj_048_09" file="/home/sbehnam/models/048/coacd_part_09.stl"/>
+    <mesh name="col_obj_048_10" file="/home/sbehnam/models/048/coacd_part_10.stl"/>
+    <mesh name="col_obj_048_11" file="/home/sbehnam/models/048/coacd_part_11.stl"/>
+    <mesh name="col_obj_048_12" file="/home/sbehnam/models/048/coacd_part_12.stl"/>
+    <mesh name="col_obj_048_13" file="/home/sbehnam/models/048/coacd_part_13.stl"/>
+    <mesh name="col_obj_048_14" file="/home/sbehnam/models/048/coacd_part_14.stl"/>
+    <mesh name="col_obj_048_15" file="/home/sbehnam/models/048/coacd_part_15.stl"/>
+    <mesh name="col_obj_048_16" file="/home/sbehnam/models/048/coacd_part_16.stl"/>
+    <mesh name="col_obj_048_17" file="/home/sbehnam/models/048/coacd_part_17.stl"/>
+    <mesh name="col_obj_048_18" file="/home/sbehnam/models/048/coacd_part_18.stl"/>
+    <mesh name="col_obj_048_19" file="/home/sbehnam/models/048/coacd_part_19.stl"/>
+    <mesh name="col_obj_048_20" file="/home/sbehnam/models/048/coacd_part_20.stl"/>
+    <mesh name="col_obj_048_21" file="/home/sbehnam/models/048/coacd_part_21.stl"/>
+    <mesh name="col_obj_048_22" file="/home/sbehnam/models/048/coacd_part_22.stl"/>
+    <mesh name="col_obj_048_23" file="/home/sbehnam/models/048/coacd_part_23.stl"/>
+    <mesh name="col_obj_048_24" file="/home/sbehnam/models/048/coacd_part_24.stl"/>
+    <mesh name="col_obj_048_25" file="/home/sbehnam/models/048/coacd_part_25.stl"/>
+    <mesh name="col_obj_048_26" file="/home/sbehnam/models/048/coacd_part_26.stl"/>
+    <mesh name="vis_obj_066" file="/home/sbehnam/models/066/textured.obj"/>
+    <mesh name="col_obj_066_00" file="/home/sbehnam/models/066/coacd_part_00.stl"/>
+    <mesh name="vis_obj_070" file="/home/sbehnam/models/070/textured.obj"/>
+    <mesh name="col_obj_070_00" file="/home/sbehnam/models/070/coacd_part_00.stl"/>
+    <mesh name="col_obj_070_01" file="/home/sbehnam/models/070/coacd_part_01.stl"/>
+    <mesh name="col_obj_070_02" file="/home/sbehnam/models/070/coacd_part_02.stl"/>
+    <mesh name="col_obj_070_03" file="/home/sbehnam/models/070/coacd_part_03.stl"/>
+    <mesh name="col_obj_070_04" file="/home/sbehnam/models/070/coacd_part_04.stl"/>
+    <mesh name="col_obj_070_05" file="/home/sbehnam/models/070/coacd_part_05.stl"/>
+    <mesh name="col_obj_070_06" file="/home/sbehnam/models/070/coacd_part_06.stl"/>
+    <mesh name="col_obj_070_07" file="/home/sbehnam/models/070/coacd_part_07.stl"/>
+    <mesh name="col_obj_070_08" file="/home/sbehnam/models/070/coacd_part_08.stl"/>
+    <mesh name="col_obj_070_09" file="/home/sbehnam/models/070/coacd_part_09.stl"/>
+    <mesh name="col_obj_070_10" file="/home/sbehnam/models/070/coacd_part_10.stl"/>
+    <mesh name="col_obj_070_11" file="/home/sbehnam/models/070/coacd_part_11.stl"/>
+    <mesh name="vis_obj_046" file="/home/sbehnam/models/046/textured.obj"/>
+    <mesh name="col_obj_046_00" file="/home/sbehnam/models/046/coacd_part_00.stl"/>
+    <mesh name="col_obj_046_01" file="/home/sbehnam/models/046/coacd_part_01.stl"/>
+    <mesh name="col_obj_046_02" file="/home/sbehnam/models/046/coacd_part_02.stl"/>
+    <mesh name="col_obj_046_03" file="/home/sbehnam/models/046/coacd_part_03.stl"/>
+    <mesh name="col_obj_046_04" file="/home/sbehnam/models/046/coacd_part_04.stl"/>
+    <mesh name="col_obj_046_05" file="/home/sbehnam/models/046/coacd_part_05.stl"/>
+    <mesh name="col_obj_046_06" file="/home/sbehnam/models/046/coacd_part_06.stl"/>
+    <mesh name="col_obj_046_07" file="/home/sbehnam/models/046/coacd_part_07.stl"/>
+    <mesh name="col_obj_046_08" file="/home/sbehnam/models/046/coacd_part_08.stl"/>
+    <mesh name="col_obj_046_09" file="/home/sbehnam/models/046/coacd_part_09.stl"/>
+    <mesh name="col_obj_046_10" file="/home/sbehnam/models/046/coacd_part_10.stl"/>
+    <mesh name="col_obj_046_11" file="/home/sbehnam/models/046/coacd_part_11.stl"/>
+    <mesh name="col_obj_046_12" file="/home/sbehnam/models/046/coacd_part_12.stl"/>
+    <mesh name="col_obj_046_13" file="/home/sbehnam/models/046/coacd_part_13.stl"/>
+    <mesh name="col_obj_046_14" file="/home/sbehnam/models/046/coacd_part_14.stl"/>
+    <mesh name="col_obj_046_15" file="/home/sbehnam/models/046/coacd_part_15.stl"/>
+    <mesh name="col_obj_046_16" file="/home/sbehnam/models/046/coacd_part_16.stl"/>
+    <mesh name="col_obj_046_17" file="/home/sbehnam/models/046/coacd_part_17.stl"/>
+    <mesh name="col_obj_046_18" file="/home/sbehnam/models/046/coacd_part_18.stl"/>
+    <mesh name="col_obj_046_19" file="/home/sbehnam/models/046/coacd_part_19.stl"/>
+    <mesh name="col_obj_046_20" file="/home/sbehnam/models/046/coacd_part_20.stl"/>
+    <mesh name="col_obj_046_21" file="/home/sbehnam/models/046/coacd_part_21.stl"/>
+    <mesh name="col_obj_046_22" file="/home/sbehnam/models/046/coacd_part_22.stl"/>
+    <mesh name="col_obj_046_23" file="/home/sbehnam/models/046/coacd_part_23.stl"/>
+    <mesh name="col_obj_046_24" file="/home/sbehnam/models/046/coacd_part_24.stl"/>
+    <mesh name="col_obj_046_25" file="/home/sbehnam/models/046/coacd_part_25.stl"/>
+    <mesh name="col_obj_046_26" file="/home/sbehnam/models/046/coacd_part_26.stl"/>
+    <mesh name="col_obj_046_27" file="/home/sbehnam/models/046/coacd_part_27.stl"/>
+    <mesh name="col_obj_046_28" file="/home/sbehnam/models/046/coacd_part_28.stl"/>
+    <mesh name="col_obj_046_29" file="/home/sbehnam/models/046/coacd_part_29.stl"/>
+    <mesh name="col_obj_046_30" file="/home/sbehnam/models/046/coacd_part_30.stl"/>
+    <mesh name="col_obj_046_31" file="/home/sbehnam/models/046/coacd_part_31.stl"/>
+    <mesh name="col_obj_046_32" file="/home/sbehnam/models/046/coacd_part_32.stl"/>
+    <mesh name="col_obj_046_33" file="/home/sbehnam/models/046/coacd_part_33.stl"/>
+    <mesh name="col_obj_046_34" file="/home/sbehnam/models/046/coacd_part_34.stl"/>
+    <mesh name="col_obj_046_35" file="/home/sbehnam/models/046/coacd_part_35.stl"/>
+    <mesh name="col_obj_046_36" file="/home/sbehnam/models/046/coacd_part_36.stl"/>
+    <mesh name="col_obj_046_37" file="/home/sbehnam/models/046/coacd_part_37.stl"/>
+    <mesh name="col_obj_046_38" file="/home/sbehnam/models/046/coacd_part_38.stl"/>
+    <mesh name="col_obj_046_39" file="/home/sbehnam/models/046/coacd_part_39.stl"/>
+        </asset>
+
+        <worldbody>
+            <light directional="true" pos="0 0 2" dir="0 0 -1" diffuse="1 1 1"/>
+
+            <!-- Table -->
+            <body name="table" pos="0 0 -0.01">
+              <geom type="box" size="0.5 0.5 0.01" rgba="0.8 0.7 0.6 1"
+                    contype="1" conaffinity="1"/>
+            </body>
+
+            <body name="marker_tw" mocap="true" pos="0 0 0">
+              <geom type="sphere" size="0.006" rgba="0.5 0.3 1 0.7"
+                    contype="0" conaffinity="0" group="2"/>
+            </body>
+            <body name="marker_theo" mocap="true" pos="0 0 0">
+              <geom type="sphere" size="0.006" rgba="0.85 0.35 0.2 0.7"
+                    contype="0" conaffinity="0" group="2"/>
+            </body>
+
+            <!-- Mocap target: Python drives this via sim.mocap_pos / sim.mocap_quat -->
+            <body name="hand_target" mocap="true" pos="0 0 0.6" quat="1 0 0 0">
+              <geom type="sphere" size="0.006" rgba="1 0.3 0.3 0.4"
+                    contype="0" conaffinity="0" group="2"/>
+            </body>
+
+            <!-- Hand: freejoint + weld equality to hand_target. Fingers remain dynamic. -->
+            <body name="hand" childclass="panda" pos="0 0 0.6" quat="1 0 0 0">
+                <freejoint name="hand_freejoint"/>
+                <inertial mass="0.73" pos="-0.01 0 0.03" diaginertia="0.001 0.0025 0.0017"/>
+                <geom mesh="hand_0" material="off_white" class="visual"/>
+                <geom mesh="hand_1" material="black"     class="visual"/>
+                <geom mesh="hand_2" material="black"     class="visual"/>
+                <geom mesh="hand_3" material="white"     class="visual"/>
+                <geom mesh="hand_4" material="off_white" class="visual"/>
+                <geom mesh="hand_c" class="collision"/>
+                <body name="left_finger" pos="0 0 0.0584">
+                  <inertial mass="0.015" pos="0 0 0" diaginertia="2.375e-6 2.375e-6 7.5e-7"/>
+                  <joint name="finger_joint1" class="finger"/>
+                  <geom mesh="finger_0" material="off_white" class="visual"/>
+                  <geom mesh="finger_1" material="black"     class="visual"/>
+                  <geom mesh="finger_0" class="collision"/>
+                  <geom class="fingertip_pad_collision_1"/>
+                  <geom class="fingertip_pad_collision_2"/>
+                  <geom class="fingertip_pad_collision_3"/>
+                  <geom class="fingertip_pad_collision_4"/>
+                  <geom class="fingertip_pad_collision_5"/>
+                  <site name="left_tip"  pos="0 0.0015 0.0445" size="0.002" rgba="1 0 0 1"/>
+                </body>
+                <body name="right_finger" pos="0 0 0.0584" quat="0 0 0 1">
+                  <inertial mass="0.015" pos="0 0 0" diaginertia="2.375e-6 2.375e-6 7.5e-7"/>
+                  <joint name="finger_joint2" class="finger"/>
+                  <geom mesh="finger_0" material="off_white" class="visual"/>
+                  <geom mesh="finger_1" material="black"     class="visual"/>
+                  <geom mesh="finger_0" class="collision"/>
+                  <geom class="fingertip_pad_collision_1"/>
+                  <geom class="fingertip_pad_collision_2"/>
+                  <geom class="fingertip_pad_collision_3"/>
+                  <geom class="fingertip_pad_collision_4"/>
+                  <geom class="fingertip_pad_collision_5"/>
+                  <site name="right_tip" pos="0 0.0015 0.0445" size="0.002" rgba="0 1 0 1"/>
+                </body>
+            </body>
+
+        <!-- Scene objects -->
+        
+              <body name="obj_014" pos="-0.1711 -0.2035 0.0284"
+                    quat="0.9948 0.0705 -0.0435 -0.0594">
+                <joint type="free" damping="1.0"/>
+                    <geom type="mesh" mesh="vis_obj_014" contype="0" conaffinity="0" group="2"/>
+<geom type="mesh" mesh="col_obj_014_00" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_01" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_02" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_03" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_04" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_05" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_06" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_07" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_08" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_09" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_10" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_11" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_12" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_13" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_014_14" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+              </body>
+              <body name="obj_000" pos="0.0017 -0.2469 0.0261"
+                    quat="0.1142 0.7065 0.0988 -0.6914">
+                <joint type="free" damping="1.0"/>
+                    <geom type="mesh" mesh="vis_obj_000" contype="0" conaffinity="0" group="2"/>
+<geom type="mesh" mesh="col_obj_000_00" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_000_01" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+              </body>
+              <body name="obj_005" pos="-0.1267 -0.1008 0.0127"
+                    quat="0.0851 0.0652 -0.0280 0.9938">
+                <joint type="free" damping="1.0"/>
+                    <geom type="mesh" mesh="vis_obj_005" contype="0" conaffinity="0" group="2"/>
+<geom type="mesh" mesh="col_obj_005_00" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_005_01" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_005_02" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_005_03" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+              </body>
+              <body name="obj_015" pos="-0.0573 -0.1396 0.0291"
+                    quat="0.1861 0.3514 -0.1614 0.9032">
+                <joint type="free" damping="1.0"/>
+                    <geom type="mesh" mesh="vis_obj_015" contype="0" conaffinity="0" group="2"/>
+<geom type="mesh" mesh="col_obj_015_00" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_015_01" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+              </body>
+              <body name="obj_020" pos="-0.2032 -0.1252 0.0173"
+                    quat="-0.3282 0.7245 0.0959 0.5985">
+                <joint type="free" damping="1.0"/>
+                    <geom type="mesh" mesh="vis_obj_020" contype="0" conaffinity="0" group="2"/>
+<geom type="mesh" mesh="col_obj_020_00" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_020_01" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_020_02" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_020_03" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_020_04" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_020_05" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+              </body>
+              <body name="obj_048" pos="-0.3379 -0.1281 0.0220"
+                    quat="-0.0465 -0.3940 0.9037 0.1610">
+                <joint type="free" damping="1.0"/>
+                    <geom type="mesh" mesh="vis_obj_048" contype="0" conaffinity="0" group="2"/>
+<geom type="mesh" mesh="col_obj_048_00" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_01" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_02" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_03" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_04" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_05" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_06" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_07" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_08" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_09" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_10" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_11" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_12" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_13" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_14" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_15" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_16" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_17" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_18" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_19" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_20" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_21" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_22" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_23" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_24" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_25" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_048_26" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+              </body>
+              <body name="obj_066" pos="0.0224 -0.0863 0.0351"
+                    quat="-0.4617 0.5195 0.4177 0.5852">
+                <joint type="free" damping="1.0"/>
+                    <geom type="mesh" mesh="vis_obj_066" contype="0" conaffinity="0" group="2"/>
+<geom type="mesh" mesh="col_obj_066_00" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+              </body>
+              <body name="obj_070" pos="-0.2653 -0.0794 0.0116"
+                    quat="0.5835 -0.3826 0.5891 0.4076">
+                <joint type="free" damping="1.0"/>
+                    <geom type="mesh" mesh="vis_obj_070" contype="0" conaffinity="0" group="2"/>
+<geom type="mesh" mesh="col_obj_070_00" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_070_01" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_070_02" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_070_03" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_070_04" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_070_05" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_070_06" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_070_07" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_070_08" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_070_09" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_070_10" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_070_11" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+              </body>
+              <body name="obj_046" pos="-0.2734 -0.2682 0.0570"
+                    quat="0.9344 0.0015 0.0255 0.3553">
+                <joint type="free" damping="1.0"/>
+                    <geom type="mesh" mesh="vis_obj_046" contype="0" conaffinity="0" group="2"/>
+<geom type="mesh" mesh="col_obj_046_00" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_01" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_02" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_03" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_04" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_05" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_06" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_07" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_08" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_09" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_10" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_11" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_12" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_13" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_14" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_15" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_16" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_17" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_18" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_19" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_20" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_21" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_22" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_23" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_24" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_25" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_26" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_27" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_28" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_29" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_30" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_31" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_32" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_33" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_34" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_35" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_36" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_37" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_38" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+<geom type="mesh" mesh="col_obj_046_39" contype="1" conaffinity="1" group="3" density="500" friction="2.0 0.05 0.001" solimp="0.99 0.999 0.0001" solref="0.005 1" condim="4"/>
+              </body>
+        </worldbody>
+
+          <contact>
+            <exclude body1="hand" body2="left_finger"/>
+            <exclude body1="hand" body2="right_finger"/>
+          </contact>
+
+          <equality>
+            <!-- Keep fingers symmetric -->
+            <joint joint1="finger_joint1" joint2="finger_joint2"
+                   solimp="0.95 0.99 0.001" solref="0.005 1"/>
+            <!-- Weld hand body to mocap target -->
+            <weld body1="hand_target" body2="hand"
+                  solimp="0.95 0.99 0.001" solref="0.002 1"/>
+          </equality>
+
+          <tendon>
+            <fixed name="split">
+              <joint joint="finger_joint1" coef="0.5"/>
+              <joint joint="finger_joint2" coef="0.5"/>
+            </fixed>
+          </tendon>
+
+          <actuator>
+            <general class="panda" name="actuator8" tendon="split" forcerange="-300 300"
+                      ctrlrange="0 255" gainprm="0.04 0 0" biasprm="0 -300 -30"/>
+          </actuator>
+
+        </mujoco>
+        
