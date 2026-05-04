@@ -25,6 +25,19 @@ class Scene:
         xml_reader        = xmlReader(os.path.join(self.scene_dir, 'annotations', '0000.xml'))
         self.posevectors  = xml_reader.getposevectorlist()
 
+    def _gripper_strength(self, strength : str = 'original'):
+        if strength == 'original':
+            return '''
+<general class="panda" name="actuator8" tendon="split" forcerange="-100 100"
+                      ctrlrange="0 255" gainprm="0.01568627451 0 0" biasprm="0 -100 -10"/>
+'''
+        elif strength == 'strong':
+            return '''
+<general class="panda" name="actuator8" tendon="split" forcerange="-300 300" ctrlrange="0 255" gainprm="0.04 0 0" biasprm="0 -300 -30"/>
+'''
+        else:
+            raise ValueError(f'Invalid strength: {strength}')
+
     @property
     def camera_pose(self):
         return self.align_mat @ self.camera_poses[0]
@@ -65,7 +78,7 @@ class Scene:
 
             if coacd and part_files:
                 asset_lines.append(
-                    f'    <mesh name="vis_obj_{obj_str}" file="{self.model_dir}/{obj_str}/textured.obj"/>'
+                    f'    <mesh name="vis_obj_{obj_str}" file="{self.model_dir}/{obj_str}/nontextured.stl"/>'
                 )
                 geom_lines = [
                     f'                  <geom type="mesh" mesh="vis_obj_{obj_str}" '
@@ -94,7 +107,7 @@ class Scene:
                 if coacd and not part_files:
                     print(f'[warn] obj {obj_str}: no CoACD parts found, falling back to single mesh')
                 asset_lines.append(
-                    f'    <mesh name="mesh_obj_{obj_str}" file="{self.model_dir}/{obj_str}/textured.obj"/>'
+                    f'    <mesh name="mesh_obj_{obj_str}" file="{self.model_dir}/{obj_str}/nontextured.stl"/>'
                 )
                 body_lines.append(f'''
               <body name="obj_{obj_str}" pos="{t[0]:.4f} {t[1]:.4f} {t[2]:.4f}"
@@ -108,7 +121,7 @@ class Scene:
               </body>''')
         return asset_lines, body_lines
 
-    def shape_xml(self, obj_indexes=None, coacd=False):
+    def shape_xml(self, obj_indexes=None, coacd=False, strength='original'):
         asset_lines, body_lines = self._build_obj_lines(obj_indexes, coacd=coacd)
 
         xml = f"""<mujoco model="graspnet_scene_0000_mocap">
@@ -267,17 +280,16 @@ class Scene:
           </tendon>
 
           <actuator>
-            <general class="panda" name="actuator8" tendon="split" forcerange="-300 300"
-                      ctrlrange="0 255" gainprm="0.04 0 0" biasprm="0 -300 -30"/>
+{self._gripper_strength(strength)}
           </actuator>
 
         </mujoco>
         """
         return xml
 
-    def save_xml(self, output_path, obj_indexes=None, coacd=False):
+    def save_xml(self, output_path, obj_indexes=None, coacd=False, strength='original'):
         with open(output_path, 'w') as f:
-            f.write(self.shape_xml(obj_indexes, coacd=coacd))
+            f.write(self.shape_xml(obj_indexes, coacd=coacd, strength=strength))
         mode = 'with CoACD collision' if coacd else 'single-mesh collision'
         print(f'Saved → {output_path}  ({mode}, mocap-weld hand)')
 
@@ -294,6 +306,9 @@ def main():
                            help='Object indexes to include (default: all)')
     argparser.add_argument('--coacd', action='store_true',
                            help='Use CoACD convex parts for collision')
+    argparser.add_argument('--strength', type=str, default='original',
+                           choices=['original', 'strong'],
+                           help='Gripper strength (default: original)')
     args = argparser.parse_args()
 
     scene = Scene(
@@ -302,7 +317,7 @@ def main():
         hand_assets=args.hand_assets,
         camera=args.camera,
     )
-    scene.save_xml(args.output_xml, obj_indexes=args.obj_indexes, coacd=args.coacd)
+    scene.save_xml(args.output_xml, obj_indexes=args.obj_indexes, coacd=args.coacd, strength=args.strength)
 
 
 if __name__ == '__main__':
