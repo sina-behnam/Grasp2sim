@@ -119,3 +119,13 @@ def gg_filter_by_object_id(grasps_group : GraspGroup, object_id) -> GraspGroup:
     return filter_grasp_group
 
     
+def gg_sort_grasps_by_z(grasp_group, ascending=True):
+    translations = grasp_group.translations  # (N, 3)
+    z_values = translations[:, 2]            # Z component
+    sorted_indices = np.argsort(z_values)
+    
+    if not ascending:
+        sorted_indices = sorted_indices[::-1]
+    
+    return grasp_group[sorted_indices]
+        
