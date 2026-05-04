@@ -17,7 +17,7 @@ from utils.poses import gg_filter_by_object_id
 from sim_logger import SimLogger
 
 # Config
-SCENE_XML   = "/home/sbehnam/Project/grasp2sim/scenes/scene_0000_mocap.xml"
+SCENE_XML   = "/home/sbehnam/Project/grasp2sim/scenes/scene_0000_mocap_simple.xml"
 GRASPS_NPY  = "/home/sbehnam/Project/data/scenes/scene_0000/grasp_group_mine.npy"
 CAMERA_EXTR = "/home/sbehnam/Project/data/scenes/scene_0000/kinect/cam0_wrt_table.npy"
 CAMERA_POSE = "/home/sbehnam/Project/data/scenes/scene_0000/kinect/camera_poses.npy"
@@ -142,7 +142,7 @@ class GraspHandMocap:
                 self.sim.mocap_quat[self.mocap_idx].copy())
 
     def move_hand(self, target_pos, target_quat, n_steps,
-                  record=False, substeps=5, settle_steps=10, ease='cosine'):
+                  record=False, substeps=5, settle_steps=40, ease='cosine'):
         """
         Smoothly drive the mocap target from current pose to target.
         The weld constraint pulls the physical hand along each substep.
@@ -250,18 +250,18 @@ class Executors:
             approach_w = np.array([0.0, 0.0, -1.0])
         pre_t_w = t_w - standoff * approach_w
 
-        exe.move_hand(pre_t_w, quat, n_steps=50, record=True)
+        exe.move_hand(pre_t_w, quat, n_steps=100, record=True)
 
         exe.open_gripper(min(0.08, width + 0.015))   # small slack
         exe.step(30)
 
-        exe.move_hand(t_w, quat, n_steps=80, record=True, substeps=5)
+        exe.move_hand(t_w, quat, n_steps=200, record=True, substeps=8)
 
         exe.close_gripper()
-        exe.step(80, record=True)
+        exe.step(200, record=True)
 
-        exe.move_hand(pre_t_w, quat, n_steps=80, record=True)
-        exe.move_hand(pre_t_w + np.array([0.0, 0.0, 0.25]), quat, n_steps=50, record=True)
+        exe.move_hand(pre_t_w, quat, n_steps=150, record=True)
+        exe.move_hand(pre_t_w + np.array([0.0, 0.0, 0.25]), quat, n_steps=200, record=True)
 
 
 def main():
