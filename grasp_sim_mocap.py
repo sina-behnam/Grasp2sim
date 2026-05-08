@@ -11,9 +11,10 @@ import mediapy as media
 from scipy.spatial.transform import Rotation as Rot
 from scipy.spatial.transform import Slerp
 from graspnetAPI import GraspGroup
+import argparse
 
-from utils.poses import gg_filter_by_object_id
-
+from loguru import logger
+from utils.poses import gg_filter_by_object_id, gg_filter_by_width, gg_filter_by_orthogonal_approach
 from sim_logger import SimLogger
 
 # Config
@@ -37,6 +38,7 @@ HOME_QUAT = np.array([1.0, 0.0, 0.0, 0.0])  # wxyz
 def _wxyz_to_xyzw(q):  return np.array([q[1], q[2], q[3], q[0]])
 def _xyzw_to_wxyz(q):  return np.array([q[3], q[0], q[1], q[2]])
 
+logger.info("Logger initialized.")
 
 class GraspHandMocap:
     """
@@ -52,9 +54,14 @@ class GraspHandMocap:
     def __init__(self, scene_xml=SCENE_XML, grasps_npy=GRASPS_NPY,
                  camera_extr=CAMERA_EXTR, camera_pose=CAMERA_POSE,
                  render='human', camera=None,
-                 debug=False, debug_log_every=1):
+                 debug=False, debug_log_every=1, seed=42):
         self.model = mujoco.MjModel.from_xml_path(scene_xml)
         self.sim   = mujoco.MjData(self.model)
+
+        np.random.seed(seed)
+        
+        # setting seed for mujoco
+        # self.model.opt.seed = seed
 
         cam_2_table      = np.load(camera_extr)
         camera_poses     = np.load(camera_pose)
@@ -174,7 +181,10 @@ class GraspHandMocap:
 
     # Gripper
     def open_gripper(self, width=0.08):
-        self.sim.ctrl[0] = (np.clip(width, 0.0, 0.08) / 0.08) * 255
+        width = np.clip(width, 0.0, 0.08)
+        q     = 0.5 * width                # per-finger slide
+        self.sim.ctrl[0] = (q / 0.04) * 255
+
 
     def close_gripper(self):
         self.sim.ctrl[0] = 0
@@ -227,7 +237,6 @@ class GraspHandMocap:
         media.write_video(path, self.frames, fps=fps)
         print(f"Saved {path}")
 
-
 class Executors:
     """Grasp execution strategies for the mocap-weld hand."""
 
@@ -250,47 +259,84 @@ class Executors:
             approach_w = np.array([0.0, 0.0, -1.0])
         pre_t_w = t_w - standoff * approach_w
 
-        exe.move_hand(pre_t_w, quat, n_steps=100, record=True)
+        exe.move_hand(pre_t_w, quat, n_steps=200, record=True)
 
-        exe.open_gripper(min(0.08, width + 0.015))   # small slack
-        exe.step(30)
+        exe.open_gripper(width + 0.02)   
+        exe.step(50, record=True)
 
-        exe.move_hand(t_w, quat, n_steps=200, record=True, substeps=8)
+        exe.move_hand(t_w, quat, n_steps=100, record=True, substeps=8)
 
         exe.close_gripper()
         exe.step(200, record=True)
 
-        exe.move_hand(pre_t_w, quat, n_steps=150, record=True)
+        exe.move_hand(pre_t_w, quat, n_steps=200, record=True)
         exe.move_hand(pre_t_w + np.array([0.0, 0.0, 0.25]), quat, n_steps=200, record=True)
 
-
 def main():
-    exe = GraspHandMocap()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--scene-xml",       default=SCENE_XML)
+    parser.add_argument("--grasps-npy",      default=GRASPS_NPY)
+    parser.add_argument("--camera-extr",     default=CAMERA_EXTR)
+    parser.add_argument("--camera-pose",     default=CAMERA_POSE)
+    parser.add_argument("--object-id",      type=int, default=-1)
+    parser.add_argument("--render",          default="human")
+    parser.add_argument("--debug",           action="store_true")
+    parser.add_argument("--debug-log-every", type=int, default=1)
+    parser.add_argument("--seed",            type=int, default=42)
+    parser.add_argument("--top",             type=int, default=20)
+    parser.add_argument("--output",          default="test-mocap2.mp4")
+    args = parser.parse_args()
+
+    exe = GraspHandMocap(
+        scene_xml=args.scene_xml,
+        grasps_npy=args.grasps_npy,
+        camera_extr=args.camera_extr,
+        camera_pose=args.camera_pose,
+        render=args.render,
+        debug=args.debug,
+        debug_log_every=args.debug_log_every,
+        seed=args.seed,
+    )
     executor   = Executors.descend
-    video_path = "test-mocap2.mp4"
+    video_path = args.output
 
-    test_grasps = exe.gg.random_sample(10)
+    if args.object_id != -1:
+        test_grasps = gg_filter_by_object_id(exe.gg, object_id=args.object_id)
+    else:
+        test_grasps = exe.gg
 
+    num_pre_width = len(test_grasps)
+
+    test_grasps = gg_filter_by_width(test_grasps, width_threshold=0.08)
+
+    num_post_width = len(test_grasps)
+
+    if num_pre_width != num_post_width:
+        logger.warning(f"Filtered out {num_pre_width - num_post_width} grasps due to width > 0.08")
+    
     test_grasps.sort_by_score()
 
-    # one_obj_grasps = gg_filter_by_object_id(exe.gg, object_id=5)
-    # test_grasps = one_obj_grasps.random_sample(min(50, len(one_obj_grasps)))
+    sampled_grasps = test_grasps[:args.top]
 
-    print(f"Testing {len(test_grasps)} grasps | executor = {executor.__name__}")
+    if len(sampled_grasps) == 0:
+        logger.error("No grasps to test after filtering. Exiting. \n [Hint] Check the object_id and width_threshold parameters.")
+        return
+
+    logger.info(f"Testing {len(sampled_grasps)} grasps | executor = {executor.__name__}")
 
     results = []
-    for rank in range(len(test_grasps)):
-        g = test_grasps[rank]
+    for rank in range(len(sampled_grasps)):
+        g = sampled_grasps[rank]
         t_w, lifted = exe.run_grasp(g, executor)
         success = len(lifted) > 0
         results.append((g.score, success, lifted))
-        print(f"[{rank+1}/{len(test_grasps)}] score={g.score:.3f} object_id={g.object_id} "
+        logger.info(f"[{rank+1}/{len(sampled_grasps)}] score={g.score:.3f} object_id={g.object_id} "
               f"t_w={np.round(t_w, 3)}  "
               f"{'SUCCESS' if success else 'FAIL'}  lifted={lifted}")
 
     exe.save_video(video_path, fps=5)
     n_ok = sum(1 for _, s, _ in results if s)
-    print(f"Success rate: {n_ok}/{len(results)} = {100*n_ok/len(results):.1f}%")
+    logger.info(f"Success rate: {n_ok}/{len(results)} = {100*n_ok/len(results):.1f}%")
 
 
 if __name__ == "__main__":
