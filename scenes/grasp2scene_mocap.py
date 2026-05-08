@@ -47,7 +47,8 @@ class Scene:
         q = Rotation.from_matrix(T[:3, :3]).as_quat()
         return q[[3, 0, 1, 2]]
 
-    def get_obj_indexes(self):
+    @property
+    def obj_indexes_list(self):
         return [parse_posevector(pv)[0] for pv in self.posevectors]
 
     def _coacd_parts(self, obj_str):
