@@ -119,13 +119,45 @@ def gg_filter_by_object_id(grasps_group : GraspGroup, object_id) -> GraspGroup:
     return filter_grasp_group
 
     
-def gg_sort_grasps_by_z(grasp_group, ascending=True):
+def gg_sort_grasps_by_z(grasp_group : GraspGroup, ascending=True):
     translations = grasp_group.translations  # (N, 3)
     z_values = translations[:, 2]            # Z component
     sorted_indices = np.argsort(z_values)
-    
+
     if not ascending:
         sorted_indices = sorted_indices[::-1]
-    
+
     return grasp_group[sorted_indices]
-        
+
+
+def gg_filter_by_orthogonal_approach(grasp_group : GraspGroup, orthogonal_threshold=np.cos(np.radians(30)),
+                                    table_to_cam = None) -> GraspGroup:
+    """
+    Filters grasps based on the orthogonality of their approach vector to the table normal (assumed to be [0, 0, 1]).
+
+    Parameters:
+    - grasp_group: GraspGroup containing the grasps to filter.
+    - orthogonal_threshold: Cosine of the angle threshold for filtering. Grasps with a cosine value above this threshold will be kept (i.e., those that are more orthogonal to the
+        table normal). Default is cos(30 degrees).
+    - table_to_cam: Optional transformation matrix from table frame to camera frame. If provided, the approach vectors will be transformed to the camera frame before filtering.
+    """
+    grasp_group_world = grasp_group
+    if table_to_cam is not None:
+        # Transform the grasp group to the camera frame
+        grasp_temp = copy.deepcopy(grasp_group)
+        grasp_group_world = grasp_temp.transform(table_to_cam)
+
+    rotations = grasp_group_world.rotation_matrices # (N, 3, 3)
+
+    approaches = rotations[:, :, 0]  # (N, 3)
+
+    cos_angles = np.abs(approaches @ np.array([0, 0, 1]))  # (N,)
+
+    mask = cos_angles >= orthogonal_threshold
+
+    return grasp_group[mask]
+
+def gg_filter_by_width(grasp_group : GraspGroup, width_threshold=0.08) -> GraspGroup:
+    widths = grasp_group.widths
+    mask = widths <= width_threshold
+    return grasp_group[mask]
