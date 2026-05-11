@@ -1,4 +1,5 @@
 import os
+from turtle import width
 os.environ["MUJOCO_GL"] = "egl"
 
 import sys
@@ -9,28 +10,26 @@ import mujoco
 import mediapy as media
 from scipy.spatial.transform import Rotation as Rot
 from scipy.spatial.transform import Slerp
-from graspnetAPI import GraspGroup
+from graspnetAPI import GraspGroup, Grasp
+import argparse
 
-from utils.poses import gg_filter_by_object_id
-
-from sim_logger import SimLogger
+from loguru import logger
+from utils.poses import gg_filter_by_object_id, gg_filter_by_width, gg_filter_by_orthogonal_approach
+from sim.logger.sim_logger import SimLogger
 
 # Config
-SCENE_XML   = "/home/sbehnam/Project/grasp2sim/scenes/scene_5-2_0000.xml"
-# GRASPS_NPY  = "/home/sbehnam/Project/data/scenes/scene_0000/grasp_group_mine.npy"
-GRASPS_NPY  = "/home/sbehnam/Project/data/scenes/scene_0000/some_banana_grasp.npy"  # smaller set for quick testing
+SCENE_XML   = "/home/sbehnam/Project/grasp2sim/scenes/scene_0000_mocap_simple.xml"
+GRASPS_NPY  = "/home/sbehnam/Project/data/scenes/scene_0000/grasp_group_mine.npy"
 CAMERA_EXTR = "/home/sbehnam/Project/data/scenes/scene_0000/kinect/cam0_wrt_table.npy"
 CAMERA_POSE = "/home/sbehnam/Project/data/scenes/scene_0000/kinect/camera_poses.npy"
 
 LIFT_HEIGHT    = 0.08
 CAPTURE_EVERY  = 15
 
-# Panda fingertip geometry
 FINGER_BASE_Z      = 0.0584
 FINGERTIP_PAD_Z    = 0.0445
 FINGERTIP_PAD_HALF = 0.0085
 FINGERTIP_OFFSET   = FINGER_BASE_Z + FINGERTIP_PAD_Z + FINGERTIP_PAD_HALF
-# FINGERTIP_OFFSET = FINGER_BASE_Z + FINGERTIP_PAD_Z
 
 HOME_POS  = np.array([0.0, 0.0, 0.6])
 HOME_QUAT = np.array([1.0, 0.0, 0.0, 0.0])  # wxyz
@@ -39,22 +38,32 @@ HOME_QUAT = np.array([1.0, 0.0, 0.0, 0.0])  # wxyz
 def _wxyz_to_xyzw(q):  return np.array([q[1], q[2], q[3], q[0]])
 def _xyzw_to_wxyz(q):  return np.array([q[3], q[0], q[1], q[2]])
 
+logger.info("Logger initialized.")
 
-class GraspHand:
+class GraspHandMocap:
     """
-    Simulated kinematic hand for grasp execution and evaluation in MuJoCo.
+    Simulated mocap-weld hand for grasp execution and evaluation in MuJoCo.
+
+    Difference from GraspHand: the hand body carries a freejoint and is
+    coupled to a mocap body (hand_target) via a weld equality constraint.
+    Python drives sim.mocap_pos / sim.mocap_quat; constraint forces pull the
+    physical hand to the target each timestep, so contacts with objects are
+    fully dynamic.
     """
 
-    def __init__(self, scene_xml=SCENE_XML, grasps_npy=GRASPS_NPY,
-                 camera_extr=CAMERA_EXTR, camera_pose=CAMERA_POSE ,render='human', camera=None,
-                 debug=False, debug_log_every=1):
+    def __init__(self, scene_xml=SCENE_XML,camera_extr=CAMERA_EXTR, camera_pose=CAMERA_POSE,
+                 render='human', camera=None, debug=False, debug_log_every=1, seed=42):
         self.model = mujoco.MjModel.from_xml_path(scene_xml)
         self.sim   = mujoco.MjData(self.model)
 
+        np.random.seed(seed)
+        
+        # setting seed for mujoco
+        # self.model.opt.seed = seed
+
         cam_2_table      = np.load(camera_extr)
         camera_poses     = np.load(camera_pose)
-        self.T_CAM2TABLE = cam_2_table @ camera_poses[0]  # Always use the first camera pose !!!
-        self.gg          = GraspGroup(np.load(grasps_npy))
+        self.T_CAM2TABLE = cam_2_table @ camera_poses[0]
 
         self.OBJ_BODY_NAMES = [f"obj_{i:03d}" for i in range(100)]
         self.obj_ids = []
@@ -65,9 +74,15 @@ class GraspHand:
                 self.obj_ids.append(bid)
                 self.obj_names.append(n)
 
-        # Hand: kinematic base — we drive model.body_pos/body_quat directly
-        self.hand_bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "hand")
-        assert self.hand_bid != -1, "hand body not found"
+        # Mocap target — Python drives this
+        target_bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "hand_target")
+        assert target_bid != -1, "hand_target mocap body not found"
+        self.mocap_idx = self.model.body_mocapid[target_bid]
+        assert self.mocap_idx != -1, "hand_target is not a mocap body"
+
+        # Freejoint on the hand body — needed for direct teleportation
+        self.freejoint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "hand_freejoint")
+        assert self.freejoint_id != -1, "hand_freejoint not found"
 
         # Renderer
         if render != 'human':
@@ -84,7 +99,6 @@ class GraspHand:
             else:
                 self.cam = camera
 
-        # Debug logging (off by default)
         self.debug = debug
         self.logger = SimLogger(self.model, self.sim,
                                 body_names=self.obj_names + ["hand"],
@@ -95,7 +109,7 @@ class GraspHand:
             self.logger.log()
 
     # Geometry
-    def grasp_to_world(self, g):
+    def grasp_to_world(self, g : Grasp):
         t_w = self.T_CAM2TABLE[:3, :3] @ g.translation + self.T_CAM2TABLE[:3, 3]
         approach_w = self.T_CAM2TABLE[:3, :3] @ g.rotation_matrix[:, 0]
         return t_w - approach_w * (FINGERTIP_OFFSET - g.depth)
@@ -109,22 +123,33 @@ class GraspHand:
         q_xyzw = Rot.from_matrix(R_hand).as_quat()
         return _xyzw_to_wxyz(q_xyzw)
 
-    # Kinematic hand control (Pattern C core)
+    # Mocap hand control
     def set_hand_pose(self, pos, quat_wxyz):
-        """Instantaneously place the hand base. No physics on the base."""
-        self.model.body_pos[self.hand_bid]  = pos
-        self.model.body_quat[self.hand_bid] = quat_wxyz
+        """
+        Teleport hand to pose by setting both the mocap target and the
+        freejoint qpos directly, avoiding weld-constraint transients.
+        """
+        # Move mocap target
+        self.sim.mocap_pos[self.mocap_idx]  = pos
+        self.sim.mocap_quat[self.mocap_idx] = quat_wxyz  # MuJoCo mocap_quat is wxyz
+
+        # Also snap the freejoint so the hand starts at the same position
+        # (avoids large constraint impulse on the next step)
+        qadr = self.model.jnt_qposadr[self.freejoint_id]
+        self.sim.qpos[qadr:qadr + 3] = pos
+        self.sim.qpos[qadr + 3:qadr + 7] = quat_wxyz  # freejoint qpos is [x,y,z, w,x,y,z]
         mujoco.mj_forward(self.model, self.sim)
 
     def get_hand_pose(self):
-        return (self.model.body_pos[self.hand_bid].copy(),
-                self.model.body_quat[self.hand_bid].copy())
+        """Return the current mocap target pose (what we commanded)."""
+        return (self.sim.mocap_pos[self.mocap_idx].copy(),
+                self.sim.mocap_quat[self.mocap_idx].copy())
 
     def move_hand(self, target_pos, target_quat, n_steps,
                   record=False, substeps=5, settle_steps=40, ease='cosine'):
         """
-        Smoothly command the kinematic hand from current pose to target.
-        Uses cosine ease-in/out for zero start/end velocity; slerp for rotation.
+        Smoothly drive the mocap target from current pose to target.
+        The weld constraint pulls the physical hand along each substep.
         """
         start_pos, start_quat = self.get_hand_pose()
         q_start  = _wxyz_to_xyzw(start_quat)
@@ -137,13 +162,14 @@ class GraspHand:
             t = 0.5 * (1.0 - np.cos(np.pi * s)) if ease == 'cosine' else s
             pos  = (1 - t) * start_pos + t * target_pos
             quat = _xyzw_to_wxyz(slerp_fn([t]).as_quat()[0])
-            self.set_hand_pose(pos, quat)
+            # Only update mocap target here — do NOT snap freejoint mid-motion
+            self.sim.mocap_pos[self.mocap_idx]  = pos
+            self.sim.mocap_quat[self.mocap_idx] = quat
             for _ in range(substeps):
                 mujoco.mj_step(self.model, self.sim)
                 self._dlog()
             if record and i % CAPTURE_EVERY == 0:
                 self.capture()
-        # Settle: hold target pose, let fingers/objects reach equilibrium
         for j in range(settle_steps):
             mujoco.mj_step(self.model, self.sim)
             self._dlog()
@@ -152,7 +178,10 @@ class GraspHand:
 
     # Gripper
     def open_gripper(self, width=0.08):
-        self.sim.ctrl[0] = (np.clip(width, 0.0, 0.08) / 0.08) * 255
+        width = np.clip(width, 0.0, 0.08)
+        q     = 0.5 * width                # per-finger slide
+        self.sim.ctrl[0] = (q / 0.04) * 255
+
 
     def close_gripper(self):
         self.sim.ctrl[0] = 0
@@ -171,30 +200,29 @@ class GraspHand:
         self.renderer.update_scene(self.sim, self.cam)
         self.frames.append(self.renderer.render().copy())
 
-    # Reset at the start of every grasp trial
+    # Reset
     def reset_scene(self):
         mujoco.mj_resetData(self.model, self.sim)
         if self.logger is not None:
             self.logger.reset()
         self.set_hand_pose(HOME_POS, HOME_QUAT)
         self.open_gripper(0.08)
-        # For stability, step the sim for a few frames before starting the grasp trial.
-        # self.step(300)
 
     # Single-grasp evaluation
-    def run_grasp(self, g, executor, mode='slerp'):
+    def run_grasp(self, g : Grasp, executor : callable):
         t_w        = self.grasp_to_world(g)
         quat       = self.to_mujoco_quat(g.rotation_matrix)
         approach_w = self.T_CAM2TABLE[:3, :3] @ g.rotation_matrix[:, 0]
 
         self.reset_scene()
-        self.open_gripper(min(0.08, g.width + 0.015))   # small slack
+        # self.open_gripper(min(0.08, g.width + 0.015))
+        self.open_gripper(0.08)
         self.step(30)
         self.capture()
 
         z0 = np.array([self.sim.xpos[oid][2] for oid in self.obj_ids])
 
-        executor(self, t_w, quat, mode=mode, approach_w=approach_w)
+        executor(self, t_w, quat, g.width, approach_w=approach_w)
 
         z1 = np.array([self.sim.xpos[oid][2] for oid in self.obj_ids])
         lift = z1 - z0
@@ -206,22 +234,16 @@ class GraspHand:
         media.write_video(path, self.frames, fps=fps)
         print(f"Saved {path}")
 
-
 class Executors:
-    """Grasp execution strategies for the kinematic hand."""
+    """Grasp execution strategies for the mocap-weld hand."""
 
     @staticmethod
-    def teleport(exe: GraspHand, t_w, quat, mode='slerp', approach_w=None):
-        """
-        Pattern-C natural: instantaneously snap hand to grasp pose, close, lift.
-        Safe because the hand base is kinematic — no impulses from the snap.
-        """
+    def teleport(exe: GraspHandMocap, t_w, quat, width, approach_w=None):
         exe.set_hand_pose(t_w, quat)
         exe.capture()
-        exe.step(30, record=True)           # let fingers re-settle around pose
+        exe.step(30, record=True)
         exe.close_gripper()
-        exe.step(200, record=True)          # finger closure on object
-        # Retreat along approach axis, then lift vertically
+        exe.step(200, record=True)
         if approach_w is not None:
             exe.move_hand(t_w - 0.10 * approach_w, quat,
                           n_steps=120, record=True)
@@ -229,55 +251,98 @@ class Executors:
         exe.move_hand(lift_pos, quat, n_steps=200, record=True)
 
     @staticmethod
-    def descend(exe: GraspHand, t_w, quat, mode='slerp',
-                approach_w=None, standoff=0.12):
-        """
-        Pre-grasp -> axial approach -> close -> retreat -> lift.
-        Standoff 12 cm > FINGERTIP_OFFSET (10.3 cm) ensures clearance.
-        """
+    def descend(exe: GraspHandMocap, t_w, quat, width, approach_w=None, standoff=0.12):
         if approach_w is None:
             approach_w = np.array([0.0, 0.0, -1.0])
         pre_t_w = t_w - standoff * approach_w
 
-        # Phase A: free-space move to pre-grasp (rotation + translation together)
         exe.move_hand(pre_t_w, quat, n_steps=200, record=True)
-        # Phase B: axial-only approach (same quat, pure translation along approach)
-        exe.move_hand(t_w, quat, n_steps=200, record=True, substeps=8)
-        # Close around object
+
+        exe.open_gripper(width + 0.02)   
+        exe.step(50, record=True)
+
+        exe.move_hand(t_w, quat, n_steps=100, record=True, substeps=8)
+
         exe.close_gripper()
         exe.step(200, record=True)
-        # Retreat along approach axis first
-        exe.move_hand(pre_t_w, quat, n_steps=150, record=True)
-        # Then lift vertically
-        exe.move_hand(pre_t_w + np.array([0.0, 0.0, 0.25]), quat,
-                      n_steps=200, record=True)
 
+        exe.move_hand(pre_t_w, quat, n_steps=200, record=True)
+        exe.move_hand(pre_t_w + np.array([0.0, 0.0, 0.25]), quat, n_steps=200, record=True)
 
 def main():
-    exe = GraspHand()
+
+    global GRASPS_NPY, CAMERA_EXTR, CAMERA_POSE, SCENE_XML
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--scene-xml",       default=SCENE_XML)
+    parser.add_argument("--grasps-npy",      default=GRASPS_NPY)
+    parser.add_argument("--camera-extr",     default=CAMERA_EXTR)
+    parser.add_argument("--camera-pose",     default=CAMERA_POSE)
+    parser.add_argument("--object-id",      type=int, default=-1)
+    parser.add_argument("--render",          default="human")
+    parser.add_argument("--debug",           action="store_true")
+    parser.add_argument("--debug-log-every", type=int, default=1)
+    parser.add_argument("--seed",            type=int, default=42)
+    parser.add_argument("--top",             type=int, default=20)
+    parser.add_argument("--output",          default="test-mocap2.mp4")
+    args = parser.parse_args()
+
+    GRASPS_NPY  = args.grasps_npy
+    CAMERA_EXTR = args.camera_extr
+    CAMERA_POSE = args.camera_pose
+    SCENE_XML   = args.scene_xml
+
+    exe = GraspHandMocap(
+        scene_xml=SCENE_XML,
+        camera_extr=CAMERA_EXTR,
+        camera_pose=CAMERA_POSE,
+        render=args.render,
+        debug=args.debug,
+        debug_log_every=args.debug_log_every,
+        seed=args.seed,
+    )
     executor   = Executors.descend
-    video_path = "test-patternC.mp4"
+    video_path = args.output
 
-    exe.gg.sort_by_score()
-    # Pick grasps for a specific object (object_id is last column of grasp array)
-    one_obj_grasps = gg_filter_by_object_id(exe.gg, object_id=5)
-    test_grasps = one_obj_grasps.random_sample(min(50, len(one_obj_grasps)))
+    gg = GraspGroup(np.load(GRASPS_NPY))
 
-    print(f"Testing {len(test_grasps)} grasps | executor = {executor.__name__}")
+    if args.object_id != -1:
+        test_grasps = gg_filter_by_object_id(gg, object_id=args.object_id)
+    else:
+        test_grasps = gg
+
+    num_pre_width = len(test_grasps)
+
+    test_grasps = gg_filter_by_width(test_grasps, width_threshold=0.08)
+
+    num_post_width = len(test_grasps)
+
+    if num_pre_width != num_post_width:
+        logger.warning(f"Filtered out {num_pre_width - num_post_width} grasps due to width > 0.08")
+    
+    test_grasps.sort_by_score()
+
+    sampled_grasps = test_grasps[:args.top]
+
+    if len(sampled_grasps) == 0:
+        logger.error("No grasps to test after filtering. Exiting. \n [Hint] Check the object_id and width_threshold parameters.")
+        return
+
+    logger.info(f"Testing {len(sampled_grasps)} grasps | executor = {executor.__name__}")
 
     results = []
-    for rank in range(len(test_grasps)):
-        g = test_grasps[rank]
-        t_w, lifted = exe.run_grasp(g, executor, mode='slerp')
+    for rank in range(len(sampled_grasps)):
+        g = sampled_grasps[rank]
+        t_w, lifted = exe.run_grasp(g, executor)
         success = len(lifted) > 0
         results.append((g.score, success, lifted))
-        print(f"[{rank+1}/{len(test_grasps)}] score={g.score:.3f} "
+        logger.info(f"[{rank+1}/{len(sampled_grasps)}] score={g.score:.3f} object_id={g.object_id} "
               f"t_w={np.round(t_w, 3)}  "
               f"{'SUCCESS' if success else 'FAIL'}  lifted={lifted}")
 
-    exe.save_video(video_path)
+    exe.save_video(video_path, fps=5)
     n_ok = sum(1 for _, s, _ in results if s)
-    print(f"Success rate: {n_ok}/{len(results)} = {100*n_ok/len(results):.1f}%")
+    logger.info(f"Success rate: {n_ok}/{len(results)} = {100*n_ok/len(results):.1f}%")
 
 
 if __name__ == "__main__":
