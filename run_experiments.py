@@ -1,17 +1,31 @@
 #!/usr/bin/env python3
 """
-Grasp experiment runner: per-object isolation vs. combined-scene success rates.
+Grasp experiment runner: per-object isolation vs. combined-scene success rates,
+with per-grasp debug instrumentation.
 
 For each object found in the scene annotation:
   1. Individual  — scene contains only that object; top-N grasps are tested.
   2. Combined    — scene contains all objects; top-N grasps per object are tested
-                   (success = the *target* object was lifted ≥ LIFT_HEIGHT).
+                   (success = the *target* object was lifted >= LIFT_HEIGHT).
+
+Every grasp is classified into one of:
+  ok                     — target object lifted
+  no_contact_at_close    — fingers never seated on the target
+  lost_during_retreat    — seated but slipped before the lift began
+  slipped_during_lift    — held through retreat but lost during the lift
+  wrong_object_lifted    — held the target through retreat, but a different
+                           object was lifted (combined mode only)
+
+Per-grasp contact + orientation plots are saved ONLY for the
+"seated + held + not lifted" cases (the interesting failures).
 
 Outputs written to <output_dir>/:
-  results.csv               one row per grasp trial
-  summary.json              success rates keyed by "experiment/obj_XXX"
-  obj_XXX_individual.mp4    per-object video  (individual mode, if --video)
-  combined.mp4              all grasps video  (combined mode,  if --video)
+  results.csv                one row per grasp trial (with state columns)
+  summary.json               per-object / per-experiment / overall stats
+  individual/obj_XXX/        contacts+orient plots for interesting failures
+  combined/obj_XXX/          same, for combined-scene runs
+  obj_XXX_individual.mp4     per-object video (individual mode, if --video)
+  combined.mp4               all grasps video (combined mode,  if --video)
 """
 
 import os
@@ -32,6 +46,7 @@ from loguru import logger
 from graspnetAPI import GraspGroup
 
 from sim.grasp_sim_mocap import GraspHandMocap, Executors
+from sim.logger.grasp_debugger import FailureMode
 from scenes.grasp2scene_mocap import Scene
 from utils.poses import gg_filter_by_object_id, gg_filter_by_width, gg_filter_by_orthogonal_approach
 
@@ -43,52 +58,124 @@ GRASPS_NPY  = f"{SCENE_DIR}/grasp_group_mine.npy"
 CAMERA_EXTR = f"{SCENE_DIR}/kinect/cam0_wrt_table.npy"
 CAMERA_POSE = f"{SCENE_DIR}/kinect/camera_poses.npy"
 OUTPUT_DIR  = "/home/sbehnam/Project/grasp2sim/experiment_results"
+FRICTION_MU = 5.0   # fingertip-pad tangential friction — used as plot reference
+
+MODE_OK                  = FailureMode.OK.value
+MODE_NO_CONTACT_AT_CLOSE = FailureMode.NO_CONTACT_AT_CLOSE.value
+MODE_LOST_DURING_RETREAT = FailureMode.LOST_DURING_RETREAT.value
+MODE_SLIPPED_DURING_LIFT = FailureMode.SLIPPED_DURING_LIFT.value
+MODE_WRONG_OBJECT_LIFTED = "wrong_object_lifted"
+
+ALL_MODES = (
+    MODE_OK, MODE_NO_CONTACT_AT_CLOSE, MODE_LOST_DURING_RETREAT,
+    MODE_SLIPPED_DURING_LIFT, MODE_WRONG_OBJECT_LIFTED,
+)
+
+
+# ── helpers ────────────────────────────────────────────────────────────────────
 
 def _prepare_grasps(gg: GraspGroup, obj_id: int, top_n: int) -> GraspGroup:
     """Filter by object ID and width, sort by score, return top-N."""
     g = gg_filter_by_object_id(gg, object_id=obj_id)
     g = gg_filter_by_width(g, width_threshold=0.08)
     g = gg_filter_by_orthogonal_approach(g,
-                                        orthogonal_threshold=np.cos(np.radians(25)),
-                                        table_to_cam=np.load(CAMERA_EXTR))
+                                         orthogonal_threshold=np.cos(np.radians(25)),
+                                         table_to_cam=np.load(CAMERA_EXTR))
     g.sort_by_score()
     return g[:top_n]
 
-def _make_sim(xml_path: str, camera_extr: str,
-              camera_pose: str, video: bool) -> GraspHandMocap:
+
+def _make_sim(xml_path: str, camera_extr: str, camera_pose: str,
+              video: bool, grasp_debug: bool,
+              overlay_corner: str = 'top_left') -> GraspHandMocap:
     return GraspHandMocap(
         scene_xml=xml_path,
         camera_extr=camera_extr,
         camera_pose=camera_pose,
         render='human' if video else 'off',
+        grasp_debug=grasp_debug,
+        grasp_debug_mu=FRICTION_MU,
+        overlay_corner=overlay_corner,
     )
 
 
-def _run_grasps(sim: GraspHandMocap, sampled: GraspGroup,
-                executor, target_obj_name: str | None) -> list:
-    """
-    Run every grasp in `sampled` through `sim.run_grasp`.
+def _classify(success: bool, seated: bool, held: bool, lifted_any: bool) -> str:
+    """Outcome classification using the target-specific success flag."""
+    if success:
+        return MODE_OK
+    if not seated:
+        return MODE_NO_CONTACT_AT_CLOSE
+    if not held:
+        return MODE_LOST_DURING_RETREAT
+    if lifted_any:
+        return MODE_WRONG_OBJECT_LIFTED
+    return MODE_SLIPPED_DURING_LIFT
 
-    target_obj_name: if given, success = that object was lifted (combined mode).
-                     if None, success = anything was lifted (individual mode).
+
+def _plot_grasp(sim: GraspHandMocap, rank: int, plot_dir: Path):
+    """Save contacts + orientation plots for the latest grasp run on `sim`."""
+    if sim.grasp_debugger is None or not sim.grasp_debugger.records:
+        return
+
+    import matplotlib.pyplot as plt
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    idx = len(sim.grasp_debugger.records) - 1
+    fig = sim.grasp_debugger.plot_grasp(
+        idx, save_path=str(plot_dir / f"grasp_{rank:03d}_contacts.png"))
+    if fig is not None:
+        plt.close(fig)
+    fig = sim.grasp_debugger.plot_grasp_orientation(
+        idx, save_path=str(plot_dir / f"grasp_{rank:03d}_orient.png"))
+    if fig is not None:
+        plt.close(fig)
+
+
+def _run_grasps(sim: GraspHandMocap, sampled: GraspGroup, executor,
+                target_obj_name: str | None,
+                experiment: str, obj_id: int,
+                output_dir: Path) -> list:
     """
+    Run every grasp in `sampled` through `sim.run_grasp`, capture state from the
+    debugger, classify each outcome, and save plots for the interesting failures.
+    """
+    plot_dir = output_dir / experiment / f"obj_{obj_id:03d}"
     records = []
     for rank in range(len(sampled)):
         g = sampled[rank]
-        t_w, lifted = sim.run_grasp(g, executor)
-        if target_obj_name is None:
-            success = len(lifted) > 0
+        t_w, lifted = sim.run_grasp(g, executor, grasp_index=rank)
+        lifted_any = len(lifted) > 0
+        success = (lifted_any if target_obj_name is None
+                   else any(name == target_obj_name for name, _ in lifted))
+
+        dbg = sim.grasp_debugger
+        if dbg is not None and dbg.records:
+            st = dbg.records[-1].state
+            seated, held = bool(st.seated), bool(st.held)
         else:
-            success = any(name == target_obj_name for name, _ in lifted)
+            seated = held = False
+
+        mode = _classify(success, seated, held, lifted_any)
+
         records.append({
-            'rank': rank + 1,
-            'score': float(g.score),
-            'width': float(g.width),
-            'success': success,
-            'lifted': [(n, round(h, 4)) for n, h in lifted],
+            'experiment':   experiment,
+            'obj_id':       obj_id,
+            'rank':         rank + 1,
+            'score':        float(g.score),
+            'width':        float(g.width),
+            'success':      int(success),
+            'seated':       int(seated),
+            'held':         int(held),
+            'lifted_any':   int(lifted_any),
+            'failure_mode': mode,
+            'lifted':       str([(n, round(h, 4)) for n, h in lifted]),
         })
-        status = 'SUCCESS' if success else 'FAIL'
-        logger.info(f"    [{rank+1}/{len(sampled)}] score={g.score:.3f}  {status}  lifted={lifted}")
+
+        tag = MODE_OK if success else mode
+        logger.info(f"    [{rank+1}/{len(sampled)}] score={g.score:.3f}  "
+                    f"seated={int(seated)} held={int(held)} success={int(success)}  -> {tag}")
+
+        _plot_grasp(sim, rank + 1, plot_dir)
+
     return records
 
 
@@ -96,7 +183,7 @@ def _run_grasps(sim: GraspHandMocap, sampled: GraspGroup,
 
 def run_individual(scene: Scene, gg: GraspGroup, obj_ids: list,
                    top_n: int, output_dir: Path,
-                   executor, video: bool) -> list:
+                   executor, video: bool, overlay_corner: str = 'top_left') -> list:
     """One scene per object; returns list of result dicts."""
     all_records = []
     for obj_id in obj_ids:
@@ -104,38 +191,36 @@ def run_individual(scene: Scene, gg: GraspGroup, obj_ids: list,
 
         sampled = _prepare_grasps(gg, obj_id, top_n)
         if len(sampled) == 0:
-            logger.warning(f"No grasps for obj_{obj_id:03d} — skipping.")
+            logger.warning(f"No grasps for obj_{obj_id:03d} - skipping.")
             continue
 
-        # Write a temporary XML with only this object
         with tempfile.NamedTemporaryFile(suffix='.xml', delete=False,
                                          mode='w', dir=output_dir) as fh:
             xml_path = fh.name
         try:
             scene.save_xml(xml_path, obj_indexes=[obj_id], coacd=True, strength='original')
-            sim = _make_sim(xml_path, str(CAMERA_EXTR),
-                            str(CAMERA_POSE), video)
+            sim = _make_sim(xml_path, str(CAMERA_EXTR), str(CAMERA_POSE),
+                            video=video, grasp_debug=True,
+                            overlay_corner=overlay_corner)
+            sim.set_overlay_prefix("individual")
 
             logger.info(f"  Testing {len(sampled)} grasps")
-            records = _run_grasps(sim, sampled, executor, target_obj_name=None)
+            records = _run_grasps(sim, sampled, executor,
+                                  target_obj_name=None,
+                                  experiment='individual',
+                                  obj_id=obj_id,
+                                  output_dir=output_dir)
 
             if video:
                 vpath = output_dir / f"obj_{obj_id:03d}_individual.mp4"
                 sim.save_video(str(vpath), fps=5)
-                logger.info(f"  Video → {vpath}")
-
+                logger.info(f"  Video -> {vpath}")
         finally:
-            os.unlink(xml_path) # clean up temp file
+            os.unlink(xml_path)
 
         n_ok = sum(1 for r in records if r['success'])
         logger.info(f"  obj_{obj_id:03d} individual: {n_ok}/{len(records)}")
-
-        for r in records:
-            all_records.append({
-                'experiment': 'individual',
-                'obj_id': obj_id,
-                **r,
-            })
+        all_records.extend(records)
 
     return all_records
 
@@ -144,7 +229,7 @@ def run_individual(scene: Scene, gg: GraspGroup, obj_ids: list,
 
 def run_combined(scene: Scene, gg: GraspGroup, obj_ids: list,
                  top_n: int, output_dir: Path,
-                 executor, video: bool) -> list:
+                 executor, video: bool, overlay_corner: str = 'top_left') -> list:
     """All objects in one scene; test top-N grasps per object."""
     logger.info("=== COMBINED  (all objects together) ===")
 
@@ -152,36 +237,35 @@ def run_combined(scene: Scene, gg: GraspGroup, obj_ids: list,
                                      mode='w', dir=output_dir) as fh:
         xml_path = fh.name
     try:
-        scene.save_xml(xml_path, obj_indexes=None, coacd=True, strength='original')  # full scene
-        sim = _make_sim(xml_path, str(CAMERA_EXTR),
-                        str(CAMERA_POSE), video)
+        scene.save_xml(xml_path, obj_indexes=None, coacd=True, strength='original')
+        sim = _make_sim(xml_path, str(CAMERA_EXTR), str(CAMERA_POSE),
+                        video=video, grasp_debug=True,
+                        overlay_corner=overlay_corner)
+        sim.set_overlay_prefix("combined")
 
         all_records = []
         for obj_id in obj_ids:
             sampled = _prepare_grasps(gg, obj_id, top_n)
             if len(sampled) == 0:
-                logger.warning(f"No grasps for obj_{obj_id:03d} in combined — skipping.")
+                logger.warning(f"No grasps for obj_{obj_id:03d} in combined - skipping.")
                 continue
 
             logger.info(f"  obj_{obj_id:03d}: {len(sampled)} grasps")
             target_name = f"obj_{obj_id:03d}"
-            records = _run_grasps(sim, sampled, executor, target_obj_name=target_name)
+            records = _run_grasps(sim, sampled, executor,
+                                  target_obj_name=target_name,
+                                  experiment='combined',
+                                  obj_id=obj_id,
+                                  output_dir=output_dir)
 
             n_ok = sum(1 for r in records if r['success'])
             logger.info(f"  obj_{obj_id:03d} combined:    {n_ok}/{len(records)}")
-
-            for r in records:
-                all_records.append({
-                    'experiment': 'combined',
-                    'obj_id': obj_id,
-                    **r,
-                })
+            all_records.extend(records)
 
         if video:
             vpath = output_dir / "combined.mp4"
             sim.save_video(str(vpath), fps=5)
-            logger.info(f"  Video → {vpath}")
-
+            logger.info(f"  Video -> {vpath}")
     finally:
         os.unlink(xml_path)
 
@@ -190,57 +274,119 @@ def run_combined(scene: Scene, gg: GraspGroup, obj_ids: list,
 
 # ── summary ────────────────────────────────────────────────────────────────────
 
+def _empty_bucket() -> dict:
+    return {'total': 0, 'seated': 0, 'held': 0, 'lifted': 0,
+            'modes': {m: 0 for m in ALL_MODES}}
+
+
+def _accumulate(bucket: dict, r: dict):
+    bucket['total']  += 1
+    bucket['seated'] += int(r['seated'])
+    bucket['held']   += int(r['held'])
+    bucket['lifted'] += int(r['success'])
+    bucket['modes'][r['failure_mode']] += 1
+
+
+def _finish(s: dict) -> dict:
+    t = s['total']
+    return {
+        'total':        t,
+        'seated':       s['seated'],
+        'held':         s['held'],
+        'lifted':       s['lifted'],
+        'seat_rate':    round(s['seated'] / t, 3) if t else 0.0,
+        'hold_rate':    round(s['held']   / t, 3) if t else 0.0,
+        'success_rate': round(s['lifted'] / t, 3) if t else 0.0,
+        'modes':        {m: n for m, n in s['modes'].items() if n},
+    }
+
+
 def _summarize(records: list) -> dict:
-    counts = defaultdict(lambda: {'success': 0, 'total': 0})
+    per_object     = defaultdict(_empty_bucket)
+    per_experiment = defaultdict(_empty_bucket)
+    overall        = _empty_bucket()
+
     for r in records:
         key = f"{r['experiment']}/obj_{r['obj_id']:03d}"
-        counts[key]['total'] += 1
-        if r['success']:
-            counts[key]['success'] += 1
+        _accumulate(per_object[key],         r)
+        _accumulate(per_experiment[r['experiment']], r)
+        _accumulate(overall,                 r)
+
     return {
-        k: {**v, 'rate': round(v['success'] / v['total'], 3) if v['total'] else 0.0}
-        for k, v in sorted(counts.items())
+        'per_object':     {k: _finish(v) for k, v in sorted(per_object.items())},
+        'per_experiment': {k: _finish(v) for k, v in sorted(per_experiment.items())},
+        'overall':        _finish(overall),
     }
+
+
+def _modes_string(modes: dict) -> str:
+    """Render the mode counts excluding 'ok' (covered by success_rate)."""
+    return ", ".join(f"{m}={n}" for m, n in modes.items() if m != MODE_OK)
 
 
 def _print_summary(summary: dict):
     logger.info("")
-    logger.info("┌─────────────────────────────────────────┬──────────┬────────┐")
-    logger.info("│ Experiment / Object                     │  Result  │  Rate  │")
-    logger.info("├─────────────────────────────────────────┼──────────┼────────┤")
-    for key, s in summary.items():
-        logger.info(f"│ {key:<39} │ {s['success']:>3}/{s['total']:<3}  │ {100*s['rate']:5.1f}% │")
-    logger.info("└─────────────────────────────────────────┴──────────┴────────┘")
+    logger.info("─── per-experiment / per-object ──────────────────────────────────────────")
+    header = f"{'key':<28} {'n':>4} {'seat':>4} {'held':>4} {'lift':>4} {'rate':>6}  | failures"
+    logger.info(header)
+    logger.info("-" * (len(header) + 20))
+    for key, s in summary['per_object'].items():
+        logger.info(
+            f"{key:<28} {s['total']:>4} {s['seated']:>4} {s['held']:>4} "
+            f"{s['lifted']:>4} {100*s['success_rate']:5.1f}%  | {_modes_string(s['modes'])}"
+        )
+
+    logger.info("")
+    logger.info("─── per-experiment totals ────────────────────────────────────────────────")
+    for exp, s in summary['per_experiment'].items():
+        logger.info(
+            f"  {exp:<10} n={s['total']:>4}  "
+            f"success={100*s['success_rate']:5.1f}%  "
+            f"seat={100*s['seat_rate']:5.1f}%  hold={100*s['hold_rate']:5.1f}%  | "
+            f"{_modes_string(s['modes'])}"
+        )
+
+    o = summary['overall']
+    logger.info("")
+    logger.info(
+        f"─── OVERALL ─── n={o['total']}  "
+        f"success={100*o['success_rate']:.1f}%  "
+        f"seat={100*o['seat_rate']:.1f}%  hold={100*o['hold_rate']:.1f}%"
+    )
 
 
 # ── main ───────────────────────────────────────────────────────────────────────
 
 def main():
-    # Global paths (allow CLI overrides)
     global GRASPS_NPY, CAMERA_EXTR, CAMERA_POSE
 
     parser = argparse.ArgumentParser(
         description="Run grasp experiments: per-object isolation vs. combined scene.")
-    parser.add_argument("--scene-dir",    default=SCENE_DIR)
-    parser.add_argument("--model-dir",    default=MODEL_DIR)
-    parser.add_argument("--hand-assets",  default=HAND_ASSETS)
-    parser.add_argument("--camera",       default=CAMERA)
-    parser.add_argument("--grasps-npy",   default=GRASPS_NPY)
-    parser.add_argument("--camera-extr",  default=CAMERA_EXTR)
-    parser.add_argument("--camera-pose",  default=CAMERA_POSE)
-    parser.add_argument("--output-dir",   default=OUTPUT_DIR)
-    parser.add_argument("--top-n",        type=int, default=10,
+    parser.add_argument("--scene-dir",     default=SCENE_DIR)
+    parser.add_argument("--model-dir",     default=MODEL_DIR)
+    parser.add_argument("--hand-assets",   default=HAND_ASSETS)
+    parser.add_argument("--camera",        default=CAMERA)
+    parser.add_argument("--grasps-npy",    default=GRASPS_NPY)
+    parser.add_argument("--camera-extr",   default=CAMERA_EXTR)
+    parser.add_argument("--camera-pose",   default=CAMERA_POSE)
+    parser.add_argument("--output-dir",    default=OUTPUT_DIR)
+    parser.add_argument("--top-n",         type=int, default=10,
                         help="Top-N grasps per object to test (default: 10)")
-    parser.add_argument("--obj-ids",      type=int, nargs='*', default=None,
+    parser.add_argument("--obj-ids",       type=int, nargs='*', default=None,
                         help="Object IDs to include (default: all found in scene annotation)")
-    parser.add_argument("--executor",     choices=["descend", "teleport"], default="descend",
+    parser.add_argument("--executor",      choices=["descend", "teleport"], default="descend",
                         help="Grasp execution strategy (default: descend)")
-    parser.add_argument("--video",        action="store_true",
+    parser.add_argument("--video",         action="store_true",
                         help="Record and save videos (slower)")
     parser.add_argument("--no-individual", action="store_true",
                         help="Skip individual-object experiments")
     parser.add_argument("--no-combined",   action="store_true",
                         help="Skip combined-scene experiment")
+    parser.add_argument("--overlay-corner",
+                        choices=["top_left", "top_right", "none"],
+                        default="top_left",
+                        help="Where to draw the 'obj_XXX grasp #N' overlay on video frames "
+                             "(default: top_left; 'none' disables the overlay).")
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
@@ -270,31 +416,31 @@ def main():
 
     if not args.no_individual:
         all_records += run_individual(scene, gg, obj_ids, args.top_n,
-                                      output_dir, executor, args.video)
+                                      output_dir, executor, args.video,
+                                      overlay_corner=args.overlay_corner)
 
     if not args.no_combined:
         all_records += run_combined(scene, gg, obj_ids, args.top_n,
-                                    output_dir, executor, args.video)
+                                    output_dir, executor, args.video,
+                                    overlay_corner=args.overlay_corner)
 
     if not all_records:
         logger.warning("No results collected. Check object IDs and grasp file.")
         return
 
-    # Save CSV
     csv_path = output_dir / "results.csv"
     fieldnames = list(all_records[0].keys())
     with open(csv_path, 'w', newline='') as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(all_records)
-    logger.info(f"Results CSV  → {csv_path}")
+    logger.info(f"Results CSV  -> {csv_path}")
 
-    # Save summary JSON
     summary = _summarize(all_records)
     json_path = output_dir / "summary.json"
     with open(json_path, 'w') as fh:
         json.dump(summary, fh, indent=2)
-    logger.info(f"Summary JSON → {json_path}")
+    logger.info(f"Summary JSON -> {json_path}")
 
     _print_summary(summary)
 
