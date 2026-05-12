@@ -19,7 +19,7 @@ from sim.logger.sim_logger import SimLogger
 from sim.logger.grasp_debugger import GraspDebugger, Phase
 
 # Config
-SCENE_XML   = "/home/sbehnam/Project/grasp2sim/scenes/scene_0000_mocap_simple.xml"
+SCENE_XML   = "/home/sbehnam/Project/grasp2sim/outputs/scenes/scene_0000_mocap_simple.xml"
 GRASPS_NPY  = "/home/sbehnam/Project/data/scenes/scene_0000/grasp_group_mine.npy"
 CAMERA_EXTR = "/home/sbehnam/Project/data/scenes/scene_0000/kinect/cam0_wrt_table.npy"
 CAMERA_POSE = "/home/sbehnam/Project/data/scenes/scene_0000/kinect/camera_poses.npy"
@@ -39,6 +39,55 @@ HOME_QUAT = np.array([1.0, 0.0, 0.0, 0.0])  # wxyz
 def _wxyz_to_xyzw(q):  return np.array([q[1], q[2], q[3], q[0]])
 def _xyzw_to_wxyz(q):  return np.array([q[3], q[0], q[1], q[2]])
 
+
+_OVERLAY_FONT_CACHE = {}
+
+def _get_overlay_font(size: int = 18):
+    """Return a PIL ImageFont, falling back to the default bitmap font."""
+    if size in _OVERLAY_FONT_CACHE:
+        return _OVERLAY_FONT_CACHE[size]
+    from PIL import ImageFont
+    candidates = (
+        "DejaVuSans-Bold.ttf",
+        "DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "Arial.ttf",
+    )
+    font = None
+    for name in candidates:
+        try:
+            font = ImageFont.truetype(name, size)
+            break
+        except OSError:
+            continue
+    if font is None:
+        font = ImageFont.load_default()
+    _OVERLAY_FONT_CACHE[size] = font
+    return font
+
+
+def _draw_overlay(frame: np.ndarray, text: str, corner: str = 'top_left') -> np.ndarray:
+    """Draw a small white-on-black text box at the requested corner of the frame."""
+    if not text or corner == 'none':
+        return frame
+    from PIL import Image, ImageDraw
+    img = Image.fromarray(frame)
+    draw = ImageDraw.Draw(img)
+    font = _get_overlay_font(18)
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    pad = 10
+    h, w = frame.shape[:2]
+    if corner == 'top_right':
+        x = w - tw - 2 * pad
+    else:
+        x = pad
+    y = pad
+    draw.rectangle([x - 6, y - 4, x + tw + 6, y + th + 6], fill=(0, 0, 0))
+    draw.text((x, y), text, fill=(255, 255, 255), font=font)
+    return np.asarray(img)
+
+
 logger.info("Logger initialized.")
 
 class GraspHandMocap:
@@ -54,7 +103,8 @@ class GraspHandMocap:
 
     def __init__(self, scene_xml=SCENE_XML,camera_extr=CAMERA_EXTR, camera_pose=CAMERA_POSE,
                  render='human', camera=None, debug=False, debug_log_every=1, seed=42,
-                 grasp_debug=False, grasp_debug_mu=1.0):
+                 grasp_debug=False, grasp_debug_mu=1.0,
+                 overlay_corner='top_left'):
         self.model = mujoco.MjModel.from_xml_path(scene_xml)
         self.sim   = mujoco.MjData(self.model)
 
@@ -105,6 +155,11 @@ class GraspHandMocap:
 
         self.grasp_debugger = GraspDebugger(self.model, self.sim, mu_estimate=grasp_debug_mu) \
             if grasp_debug else None
+
+        # Video overlay
+        self.overlay_corner = overlay_corner   # 'top_left' | 'top_right' | 'none'
+        self.overlay_prefix = ""               # set by experiment runner (e.g. "individual")
+        self.overlay_text   = ""               # auto-set per grasp by run_grasp()
 
     def _dlog(self):
         if self.logger is not None:
@@ -207,7 +262,18 @@ class GraspHandMocap:
         if self.renderer is None:
             return
         self.renderer.update_scene(self.sim, self.cam)
-        self.frames.append(self.renderer.render().copy())
+        frame = self.renderer.render().copy()
+        if self.overlay_text and self.overlay_corner != 'none':
+            frame = _draw_overlay(frame, self.overlay_text, self.overlay_corner)
+        self.frames.append(frame)
+
+    def set_overlay_prefix(self, prefix: str):
+        """Set a text prefix (e.g. experiment name) prepended to the per-grasp overlay."""
+        self.overlay_prefix = str(prefix) if prefix else ""
+
+    def _refresh_overlay(self, g, grasp_index: int):
+        base = f"obj_{int(g.object_id):03d}  grasp #{grasp_index + 1}"
+        self.overlay_text = f"{self.overlay_prefix} | {base}" if self.overlay_prefix else base
 
     # Reset
     def reset_scene(self):
@@ -224,6 +290,7 @@ class GraspHandMocap:
         approach_w = self.T_CAM2TABLE[:3, :3] @ g.rotation_matrix[:, 0]
         binormal_w = self.T_CAM2TABLE[:3, :3] @ g.rotation_matrix[:, 1]
 
+        self._refresh_overlay(g, grasp_index)
         self.reset_scene()
         # self.open_gripper(min(0.08, g.width + 0.015))
         self.open_gripper(0.08)
