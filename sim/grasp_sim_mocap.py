@@ -16,6 +16,7 @@ import argparse
 from loguru import logger
 from utils.poses import gg_filter_by_object_id, gg_filter_by_width, gg_filter_by_orthogonal_approach
 from sim.logger.sim_logger import SimLogger
+from sim.logger.grasp_debugger import GraspDebugger, Phase
 
 # Config
 SCENE_XML   = "/home/sbehnam/Project/grasp2sim/scenes/scene_0000_mocap_simple.xml"
@@ -52,14 +53,12 @@ class GraspHandMocap:
     """
 
     def __init__(self, scene_xml=SCENE_XML,camera_extr=CAMERA_EXTR, camera_pose=CAMERA_POSE,
-                 render='human', camera=None, debug=False, debug_log_every=1, seed=42):
+                 render='human', camera=None, debug=False, debug_log_every=1, seed=42,
+                 grasp_debug=False, grasp_debug_mu=1.0):
         self.model = mujoco.MjModel.from_xml_path(scene_xml)
         self.sim   = mujoco.MjData(self.model)
 
         np.random.seed(seed)
-        
-        # setting seed for mujoco
-        # self.model.opt.seed = seed
 
         cam_2_table      = np.load(camera_extr)
         camera_poses     = np.load(camera_pose)
@@ -104,9 +103,19 @@ class GraspHandMocap:
                                 body_names=self.obj_names + ["hand"],
                                 log_every=debug_log_every) if debug else None
 
+        self.grasp_debugger = GraspDebugger(self.model, self.sim, mu_estimate=grasp_debug_mu) \
+            if grasp_debug else None
+
     def _dlog(self):
         if self.logger is not None:
             self.logger.log()
+        if self.grasp_debugger is not None:
+            self.grasp_debugger.log_step()
+
+    def mark_phase(self, name):
+        """No-op when grasp_debugger is disabled."""
+        if self.grasp_debugger is not None:
+            self.grasp_debugger.mark_phase(name)
 
     # Geometry
     def grasp_to_world(self, g : Grasp):
@@ -209,10 +218,11 @@ class GraspHandMocap:
         self.open_gripper(0.08)
 
     # Single-grasp evaluation
-    def run_grasp(self, g : Grasp, executor : callable):
+    def run_grasp(self, g : Grasp, executor : callable, grasp_index=0):
         t_w        = self.grasp_to_world(g)
         quat       = self.to_mujoco_quat(g.rotation_matrix)
         approach_w = self.T_CAM2TABLE[:3, :3] @ g.rotation_matrix[:, 0]
+        binormal_w = self.T_CAM2TABLE[:3, :3] @ g.rotation_matrix[:, 1]
 
         self.reset_scene()
         # self.open_gripper(min(0.08, g.width + 0.015))
@@ -222,12 +232,21 @@ class GraspHandMocap:
 
         z0 = np.array([self.sim.xpos[oid][2] for oid in self.obj_ids])
 
+        if self.grasp_debugger is not None:
+            self.grasp_debugger.begin_grasp(grasp_index, g.score, g.object_id, t_w, g.width,
+                                            approach_baseline=approach_w,
+                                            binormal_baseline=binormal_w)
+
         executor(self, t_w, quat, g.width, approach_w=approach_w)
 
         z1 = np.array([self.sim.xpos[oid][2] for oid in self.obj_ids])
         lift = z1 - z0
         lifted = [(self.obj_names[i], float(lift[i]))
                   for i in range(len(self.obj_ids)) if lift[i] >= LIFT_HEIGHT]
+
+        if self.grasp_debugger is not None:
+            self.grasp_debugger.end_grasp(success=len(lifted) > 0, lifted=lifted)
+
         return t_w, lifted
 
     def save_video(self, path, fps=8):
@@ -239,16 +258,24 @@ class Executors:
 
     @staticmethod
     def teleport(exe: GraspHandMocap, t_w, quat, width, approach_w=None):
+        exe.mark_phase(Phase.APPROACH)
         exe.set_hand_pose(t_w, quat)
         exe.capture()
         exe.step(30, record=True)
+
+        exe.mark_phase(Phase.CLOSE)
         exe.close_gripper()
         exe.step(200, record=True)
+
+        exe.mark_phase(Phase.RETREAT)
         if approach_w is not None:
             exe.move_hand(t_w - 0.10 * approach_w, quat,
                           n_steps=120, record=True)
+
+        exe.mark_phase(Phase.LIFT)
         lift_pos = exe.get_hand_pose()[0] + np.array([0.0, 0.0, 0.30])
         exe.move_hand(lift_pos, quat, n_steps=200, record=True)
+        exe.mark_phase(Phase.DONE)
 
     @staticmethod
     def descend(exe: GraspHandMocap, t_w, quat, width, approach_w=None, standoff=0.12):
@@ -256,18 +283,22 @@ class Executors:
             approach_w = np.array([0.0, 0.0, -1.0])
         pre_t_w = t_w - standoff * approach_w
 
+        exe.mark_phase(Phase.APPROACH)
         exe.move_hand(pre_t_w, quat, n_steps=200, record=True)
-
-        exe.open_gripper(width + 0.02)   
+        exe.open_gripper(width + 0.02)
         exe.step(50, record=True)
-
         exe.move_hand(t_w, quat, n_steps=100, record=True, substeps=8)
 
+        exe.mark_phase(Phase.CLOSE)
         exe.close_gripper()
         exe.step(200, record=True)
 
+        exe.mark_phase(Phase.RETREAT)
         exe.move_hand(pre_t_w, quat, n_steps=200, record=True)
+
+        exe.mark_phase(Phase.LIFT)
         exe.move_hand(pre_t_w + np.array([0.0, 0.0, 0.25]), quat, n_steps=200, record=True)
+        exe.mark_phase(Phase.DONE)
 
 def main():
 
@@ -285,6 +316,12 @@ def main():
     parser.add_argument("--seed",            type=int, default=42)
     parser.add_argument("--top",             type=int, default=20)
     parser.add_argument("--output",          default="test-mocap2.mp4")
+    parser.add_argument("--grasp-debug",     action="store_true",
+                        help="Enable per-grasp contact/phase instrumentation.")
+    parser.add_argument("--grasp-debug-out", default="grasp_debug",
+                        help="Directory for grasp-debug artefacts (records, plots, csv).")
+    parser.add_argument("--grasp-debug-mu",  type=float, default=1.0,
+                        help="Estimated friction coefficient for friction-cone plot annotation.")
     args = parser.parse_args()
 
     GRASPS_NPY  = args.grasps_npy
@@ -300,6 +337,8 @@ def main():
         debug=args.debug,
         debug_log_every=args.debug_log_every,
         seed=args.seed,
+        grasp_debug=args.grasp_debug,
+        grasp_debug_mu=args.grasp_debug_mu,
     )
     executor   = Executors.descend
     video_path = args.output
@@ -319,6 +358,10 @@ def main():
 
     if num_pre_width != num_post_width:
         logger.warning(f"Filtered out {num_pre_width - num_post_width} grasps due to width > 0.08")
+
+    test_grasps = gg_filter_by_orthogonal_approach(test_grasps, 
+                                        orthogonal_threshold=np.cos(np.radians(25)),
+                                        table_to_cam=exe.T_CAM2TABLE)
     
     test_grasps.sort_by_score()
 
@@ -333,7 +376,7 @@ def main():
     results = []
     for rank in range(len(sampled_grasps)):
         g = sampled_grasps[rank]
-        t_w, lifted = exe.run_grasp(g, executor)
+        t_w, lifted = exe.run_grasp(g, executor, grasp_index=rank)
         success = len(lifted) > 0
         results.append((g.score, success, lifted))
         logger.info(f"[{rank+1}/{len(sampled_grasps)}] score={g.score:.3f} object_id={g.object_id} "
@@ -343,6 +386,11 @@ def main():
     exe.save_video(video_path, fps=5)
     n_ok = sum(1 for _, s, _ in results if s)
     logger.info(f"Success rate: {n_ok}/{len(results)} = {100*n_ok/len(results):.1f}%")
+
+    if exe.grasp_debugger is not None:
+        exe.grasp_debugger.print_summary(log=logger.info)
+        exe.grasp_debugger.dump(args.grasp_debug_out)
+        logger.info(f"Grasp-debug artefacts saved -> {args.grasp_debug_out}")
 
 
 if __name__ == "__main__":
