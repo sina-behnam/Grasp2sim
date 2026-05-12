@@ -11,7 +11,7 @@ GRASPNET_SCENE_ROOT = '/home/sbehnam/Project/data/scenes/scene_0000'
 MODEL_DIR   = '/home/sbehnam/models'
 HAND_ASSETS = '/home/sbehnam/Project/grasp2sim/franka_emika_panda/assets'
 CAMERA      = 'kinect'
-OUTPUT_XML  = 'scene_0000_mocap.xml'
+OUTPUT_XML  = '/home/sbehnam/Project/grasp2sim/outputs/scenes/scene_0000_mocap.xml'
 
 
 class Scene:
