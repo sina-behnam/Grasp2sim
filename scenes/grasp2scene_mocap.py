@@ -15,7 +15,11 @@ OUTPUT_XML  = 'scene_0000_mocap.xml'
 
 
 class Scene:
-    def __init__(self, scene_dir, model_dir, hand_assets, camera='kinect'):
+    def __init__(self, 
+                scene_dir   = GRASPNET_SCENE_ROOT,
+                model_dir   = MODEL_DIR,
+                hand_assets = HAND_ASSETS,
+                camera      = CAMERA):
         self.camera      = camera
         self.scene_dir   = os.path.join(scene_dir, camera)
         self.model_dir   = model_dir
