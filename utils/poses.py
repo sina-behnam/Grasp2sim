@@ -52,14 +52,21 @@ def pose2vectors(annotation_xml_path):
     xml_reader  = xmlReader(annotation_xml_path)
     return xml_reader.getposevectorlist()
 
-def publish_grasp_labels(wanted_object_ids : list):
-    camera_pose = np.load(CAMERA_POSES)[0]
-    pose_vectors = pose2vectors(FIRST_ANNOTATION_XML)
+def publish_grasp_labels(
+        wanted_object_ids : list,
+        grasp_label_path=GRASP_LABEL_PATH,
+        collision_label_path=COLLISION_LABEL_PATH,
+        camera_poses_path=CAMERA_POSES,
+        first_annotation_xml=FIRST_ANNOTATION_XML,
+        ):
+    
+    camera_pose = np.load(camera_poses_path)[0]
+    pose_vectors = pose2vectors(first_annotation_xml)
 
     obj_list, pose_list = get_obj_pose_list(camera_pose, pose_vectors)
 
-    grasp_labels = load_grasp_label(GRASP_LABEL_PATH, obj_list)
-    collision_dump = loadCollisionLabel(COLLISION_LABEL_PATH)
+    grasp_labels = load_grasp_label(grasp_label_path, obj_list)
+    collision_dump = loadCollisionLabel(collision_label_path)
 
     num_views, num_angles, num_depths = 300, 12, 4
     template_views = generate_views(num_views)
