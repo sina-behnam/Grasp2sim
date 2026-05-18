@@ -13,27 +13,24 @@ class PathsConfig:
     HAND_ASSETS:      str = field(default_factory=lambda: os.getenv("HAND_ASSETS", ""))
     GRASP2SIM_OUTPUT: str = field(default_factory=lambda: os.getenv("GRASP2SIM_OUTPUT", ""))
     CAMERA:           str = field(default_factory=lambda: os.getenv("CAMERA", "kinect"))
-    # Derived — auto-computed from primaries; override any via .env
-    SCENE_DIR:   str = ""
-    GRASPS_NPY:  str = ""
-    CAMERA_EXTR: str = ""
-    CAMERA_POSE: str = ""
-    OUTPUT_DIR:  str = ""
-    SCENE_XML:   str = ""
-    OUTPUT_XML:  str = ""
+
+    def __setattr__(self, name: str, value) -> None:
+        object.__setattr__(self, name, value)
+        os.environ[name] = str(value)
 
     def __post_init__(self):
         sd  = os.getenv("SCENE_DIR") or os.path.join(self.GRASPNET_DATASET, self.SCENE_ID)
         cam = self.CAMERA
         out = self.GRASP2SIM_OUTPUT
         sid = self.SCENE_ID
-        self.SCENE_DIR   = self.SCENE_DIR   or sd
-        self.GRASPS_NPY  = self.GRASPS_NPY  or os.getenv("GRASPS_NPY")  or os.path.join(sd, "grasp_group_mine.npy")
-        self.CAMERA_EXTR = self.CAMERA_EXTR or os.getenv("CAMERA_EXTR") or os.path.join(sd, cam, "cam0_wrt_table.npy")
-        self.CAMERA_POSE = self.CAMERA_POSE or os.getenv("CAMERA_POSE") or os.path.join(sd, cam, "camera_poses.npy")
-        self.OUTPUT_DIR  = self.OUTPUT_DIR  or os.getenv("OUTPUT_DIR")  or os.path.join(out, "experiments")
-        self.SCENE_XML   = self.SCENE_XML   or os.getenv("SCENE_XML")   or os.path.join(out, "scenes", f"{sid}_mocap.xml")
-        self.OUTPUT_XML  = self.OUTPUT_XML  or os.getenv("OUTPUT_XML")  or os.path.join(out, "scenes", f"{sid}_mocap.xml")
+
+        self.SCENE_DIR   = sd
+        self.GRASPS_NPY  = os.getenv("GRASPS_NPY")  or os.path.join(sd, "grasp_group_mine.npy")
+        self.CAMERA_EXTR = os.getenv("CAMERA_EXTR") or os.path.join(sd, cam, "cam0_wrt_table.npy")
+        self.CAMERA_POSE = os.getenv("CAMERA_POSE") or os.path.join(sd, cam, "camera_poses.npy")
+        self.OUTPUT_DIR  = os.getenv("OUTPUT_DIR")  or os.path.join(out, "experiments")
+        self.SCENE_XML   = os.getenv("SCENE_XML")   or os.path.join(out, "scenes", f"{sid}_mocap.xml")
+        self.OUTPUT_XML  = os.getenv("OUTPUT_XML")  or os.path.join(out, "scenes", f"{sid}_mocap.xml")
 
 
 @dataclass
@@ -44,12 +41,20 @@ class SimConfig:
     DEBUG_LOG_EVERY: int   = field(default_factory=lambda: int(os.getenv("DEBUG_LOG_EVERY", "1")))
     FRICTION_MU:     float = field(default_factory=lambda: float(os.getenv("FRICTION_MU", "5.0")))
 
+    def __setattr__(self, name: str, value) -> None:
+        object.__setattr__(self, name, value)
+        os.environ[name] = str(value)
+
 
 @dataclass
 class ExperimentConfig:
     TOP_N:    int  = field(default_factory=lambda: int(os.getenv("TOP_N", "10")))
     EXECUTOR: str  = field(default_factory=lambda: os.getenv("EXECUTOR", "descend"))
     VIDEO:    bool = field(default_factory=lambda: os.getenv("VIDEO", "false").lower() in ("true", "1", "t"))
+
+    def __setattr__(self, name: str, value) -> None:
+        object.__setattr__(self, name, value)
+        os.environ[name] = str(value)
 
 
 @dataclass
@@ -68,7 +73,6 @@ class Config:
                     f"Config.paths.{attr} = {path!r} does not exist. "
                     "Check your .env file."
                 )
-
     def __str__(self):
         return (
             f"Config:\n"
