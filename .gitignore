@@ -17,3 +17,5 @@ outputs/
 # --- Temperorarly ignore ---
 app/
 env/
+
+.env

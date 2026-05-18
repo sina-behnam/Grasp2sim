@@ -45,20 +45,21 @@ import numpy as np
 from loguru import logger
 from graspnetAPI import GraspGroup
 
+from manage import config
 from sim.grasp_sim_mocap import GraspHandMocap, Executors
 from sim.logger.grasp_debugger import FailureMode
 from scenes.grasp2scene_mocap import Scene
 from utils.poses import gg_filter_by_object_id, gg_filter_by_width, gg_filter_by_orthogonal_approach
 
-SCENE_DIR   = "/home/sbehnam/Project/data/scenes/scene_0000"
-MODEL_DIR   = "/home/sbehnam/models"
-HAND_ASSETS = "/home/sbehnam/Project/grasp2sim/franka_emika_panda/assets"
-CAMERA      = "kinect"
-GRASPS_NPY  = f"{SCENE_DIR}/grasp_group_mine.npy"
-CAMERA_EXTR = f"{SCENE_DIR}/kinect/cam0_wrt_table.npy"
-CAMERA_POSE = f"{SCENE_DIR}/kinect/camera_poses.npy"
-OUTPUT_DIR  = "/home/sbehnam/Project/grasp2sim/experiment_results"
-FRICTION_MU = 5.0   # fingertip-pad tangential friction — used as plot reference
+SCENE_DIR   = config.paths.SCENE_DIR
+MODEL_DIR   = config.paths.MODEL_DIR
+HAND_ASSETS = config.paths.HAND_ASSETS
+CAMERA      = config.paths.CAMERA
+GRASPS_NPY  = config.paths.GRASPS_NPY
+CAMERA_EXTR = config.paths.CAMERA_EXTR
+CAMERA_POSE = config.paths.CAMERA_POSE
+OUTPUT_DIR  = config.paths.OUTPUT_DIR
+FRICTION_MU = config.sim.FRICTION_MU
 
 MODE_OK                  = FailureMode.OK.value
 MODE_NO_CONTACT_AT_CLOSE = FailureMode.NO_CONTACT_AT_CLOSE.value

@@ -1,5 +1,4 @@
 import os
-from turtle import width
 os.environ["MUJOCO_GL"] = "egl"
 
 import sys
@@ -11,18 +10,20 @@ import mediapy as media
 from scipy.spatial.transform import Rotation as Rot
 from scipy.spatial.transform import Slerp
 from graspnetAPI import GraspGroup, Grasp
+from dotenv import load_dotenv, find_dotenv
 import argparse
+
+load_dotenv(find_dotenv())
 
 from loguru import logger
 from utils.poses import gg_filter_by_object_id, gg_filter_by_width, gg_filter_by_orthogonal_approach
 from sim.logger.sim_logger import SimLogger
 from sim.logger.grasp_debugger import GraspDebugger, Phase
 
-# Config
-SCENE_XML   = "/home/sbehnam/Project/grasp2sim/outputs/scenes/scene_0000_mocap_simple.xml"
-GRASPS_NPY  = "/home/sbehnam/Project/data/scenes/scene_0000/grasp_group_mine.npy"
-CAMERA_EXTR = "/home/sbehnam/Project/data/scenes/scene_0000/kinect/cam0_wrt_table.npy"
-CAMERA_POSE = "/home/sbehnam/Project/data/scenes/scene_0000/kinect/camera_poses.npy"
+SCENE_XML   = os.getenv("SCENE_XML")
+GRASPS_NPY  = os.getenv("GRASPS_NPY")
+CAMERA_EXTR = os.getenv("CAMERA_EXTR")
+CAMERA_POSE = os.getenv("CAMERA_POSE")
 
 LIFT_HEIGHT    = 0.08
 CAPTURE_EVERY  = 15

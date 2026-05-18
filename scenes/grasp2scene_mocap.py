@@ -4,14 +4,16 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 from graspnetAPI.utils.xmlhandler import xmlReader
 from graspnetAPI.utils.utils import parse_posevector
-
+from dotenv import load_dotenv, find_dotenv
 import argparse
 
-GRASPNET_SCENE_ROOT = '/home/sbehnam/Project/data/scenes/scene_0000'
-MODEL_DIR   = '/home/sbehnam/models'
-HAND_ASSETS = '/home/sbehnam/Project/grasp2sim/franka_emika_panda/assets'
-CAMERA      = 'kinect'
-OUTPUT_XML  = '/home/sbehnam/Project/grasp2sim/outputs/scenes/scene_0000_mocap.xml'
+load_dotenv(find_dotenv())
+
+GRASPNET_SCENE_ROOT = os.getenv("SCENE_DIR")
+MODEL_DIR           = os.getenv("MODEL_DIR")
+HAND_ASSETS         = os.getenv("HAND_ASSETS")
+CAMERA              = os.getenv("CAMERA")
+OUTPUT_XML          = os.getenv("OUTPUT_XML")
 
 
 class Scene:
