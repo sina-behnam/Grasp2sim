@@ -2,6 +2,10 @@ import numpy as np
 import open3d as o3d
 from IPython.display import Image
 
+import os
+from typing import List, Tuple
+
+
 def save_point_cloud_to_ply(geometries, filename):
 
     try:
@@ -105,3 +109,30 @@ def render_geometries_to_notebook(
     img = renderer.render_to_image()
     o3d.io.write_image(save_path, img)
     return Image(save_path)
+
+
+# -------------------- Grasp evaluation helpers --------------------
+
+def unit(v):
+    if v is None:
+        return None
+    v = np.asarray(v, dtype=np.float64)
+    n = float(np.linalg.norm(v))
+    return (v / n) if n > 1e-12 else v.copy()
+
+def angular_deviation(A: np.ndarray, baseline) -> np.ndarray:
+    """Per-row angle in degrees between unit vectors A[i] and `baseline`."""
+    if baseline is None or A.size == 0:
+        return np.zeros(len(A))
+    norms = np.linalg.norm(A, axis=1, keepdims=True) + 1e-12
+    A_u = A / norms
+    cos = np.clip(A_u @ baseline, -1.0, 1.0)
+    return np.degrees(np.arccos(cos))
+
+def safe_divide(num: np.ndarray, den: np.ndarray, eps: float = 1e-6) -> np.ndarray:
+    """Element-wise num/den, 0 where |den| <= eps. No divide-by-zero warning."""
+    out = np.zeros_like(den, dtype=np.float64)
+    mask = np.abs(den) > eps
+    out[mask] = num[mask] / den[mask]
+    return out
+

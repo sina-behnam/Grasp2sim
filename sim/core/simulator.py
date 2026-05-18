@@ -18,7 +18,10 @@ load_dotenv(find_dotenv())
 from loguru import logger
 from utils.poses import gg_filter_by_object_id, gg_filter_by_width, gg_filter_by_orthogonal_approach
 from sim.logger.sim_logger import SimLogger
-from sim.logger.grasp_debugger import GraspDebugger, Phase
+from sim.geval.grasp_eval import GraspEvaluator
+from sim.geval.metrics import Phase
+
+from .helpers import _draw_overlay
 
 SCENE_XML   = os.getenv("SCENE_XML")
 GRASPS_NPY  = os.getenv("GRASPS_NPY")
@@ -36,58 +39,8 @@ FINGERTIP_OFFSET   = FINGER_BASE_Z + FINGERTIP_PAD_Z + FINGERTIP_PAD_HALF
 HOME_POS  = np.array([0.0, 0.0, 0.6])
 HOME_QUAT = np.array([1.0, 0.0, 0.0, 0.0])  # wxyz
 
-
 def _wxyz_to_xyzw(q):  return np.array([q[1], q[2], q[3], q[0]])
 def _xyzw_to_wxyz(q):  return np.array([q[3], q[0], q[1], q[2]])
-
-
-_OVERLAY_FONT_CACHE = {}
-
-def _get_overlay_font(size: int = 18):
-    """Return a PIL ImageFont, falling back to the default bitmap font."""
-    if size in _OVERLAY_FONT_CACHE:
-        return _OVERLAY_FONT_CACHE[size]
-    from PIL import ImageFont
-    candidates = (
-        "DejaVuSans-Bold.ttf",
-        "DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "Arial.ttf",
-    )
-    font = None
-    for name in candidates:
-        try:
-            font = ImageFont.truetype(name, size)
-            break
-        except OSError:
-            continue
-    if font is None:
-        font = ImageFont.load_default()
-    _OVERLAY_FONT_CACHE[size] = font
-    return font
-
-
-def _draw_overlay(frame: np.ndarray, text: str, corner: str = 'top_left') -> np.ndarray:
-    """Draw a small white-on-black text box at the requested corner of the frame."""
-    if not text or corner == 'none':
-        return frame
-    from PIL import Image, ImageDraw
-    img = Image.fromarray(frame)
-    draw = ImageDraw.Draw(img)
-    font = _get_overlay_font(18)
-    bbox = draw.textbbox((0, 0), text, font=font)
-    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    pad = 10
-    h, w = frame.shape[:2]
-    if corner == 'top_right':
-        x = w - tw - 2 * pad
-    else:
-        x = pad
-    y = pad
-    draw.rectangle([x - 6, y - 4, x + tw + 6, y + th + 6], fill=(0, 0, 0))
-    draw.text((x, y), text, fill=(255, 255, 255), font=font)
-    return np.asarray(img)
-
 
 logger.info("Logger initialized.")
 
@@ -104,7 +57,7 @@ class GraspHandMocap:
 
     def __init__(self, scene_xml=SCENE_XML,camera_extr=CAMERA_EXTR, camera_pose=CAMERA_POSE,
                  render='human', camera=None, debug=False, debug_log_every=1, seed=42,
-                 grasp_debug=False, grasp_debug_mu=1.0,
+                 grasp_eval=False, grasp_eval_mu=1.0,
                  overlay_corner='top_left'):
         self.model = mujoco.MjModel.from_xml_path(scene_xml)
         self.sim   = mujoco.MjData(self.model)
@@ -154,8 +107,8 @@ class GraspHandMocap:
                                 body_names=self.obj_names + ["hand"],
                                 log_every=debug_log_every) if debug else None
 
-        self.grasp_debugger = GraspDebugger(self.model, self.sim, mu_estimate=grasp_debug_mu) \
-            if grasp_debug else None
+        self.grasp_evaluator = GraspEvaluator(self.model, self.sim, mu_estimate=grasp_eval_mu) \
+            if grasp_eval else None
 
         # Video overlay
         self.overlay_corner = overlay_corner   # 'top_left' | 'top_right' | 'none'
@@ -165,13 +118,13 @@ class GraspHandMocap:
     def _dlog(self):
         if self.logger is not None:
             self.logger.log()
-        if self.grasp_debugger is not None:
-            self.grasp_debugger.log_step()
+        if self.grasp_evaluator is not None:
+            self.grasp_evaluator.log_step()
 
     def mark_phase(self, name):
-        """No-op when grasp_debugger is disabled."""
-        if self.grasp_debugger is not None:
-            self.grasp_debugger.mark_phase(name)
+        """No-op when grasp_evaluator is disabled."""
+        if self.grasp_evaluator is not None:
+            self.grasp_evaluator.mark_phase(name)
 
     # Geometry
     def grasp_to_world(self, g : Grasp):
@@ -300,8 +253,8 @@ class GraspHandMocap:
 
         z0 = np.array([self.sim.xpos[oid][2] for oid in self.obj_ids])
 
-        if self.grasp_debugger is not None:
-            self.grasp_debugger.begin_grasp(grasp_index, g.score, g.object_id, t_w, g.width,
+        if self.grasp_evaluator is not None:
+            self.grasp_evaluator.begin_grasp(grasp_index, g.score, g.object_id, t_w, g.width,
                                             approach_baseline=approach_w,
                                             binormal_baseline=binormal_w)
 
@@ -312,8 +265,8 @@ class GraspHandMocap:
         lifted = [(self.obj_names[i], float(lift[i]))
                   for i in range(len(self.obj_ids)) if lift[i] >= LIFT_HEIGHT]
 
-        if self.grasp_debugger is not None:
-            self.grasp_debugger.end_grasp(success=len(lifted) > 0, lifted=lifted)
+        if self.grasp_evaluator is not None:
+            self.grasp_evaluator.end_grasp(success=len(lifted) > 0, lifted=lifted)
 
         return t_w, lifted
 
@@ -384,11 +337,11 @@ def main():
     parser.add_argument("--seed",            type=int, default=42)
     parser.add_argument("--top",             type=int, default=20)
     parser.add_argument("--output",          default="test-mocap2.mp4")
-    parser.add_argument("--grasp-debug",     action="store_true",
+    parser.add_argument("--grasp-eval",     action="store_true",
                         help="Enable per-grasp contact/phase instrumentation.")
-    parser.add_argument("--grasp-debug-out", default="grasp_debug",
-                        help="Directory for grasp-debug artefacts (records, plots, csv).")
-    parser.add_argument("--grasp-debug-mu",  type=float, default=1.0,
+    parser.add_argument("--grasp-eval-out", default="grasp_eval",
+                        help="Directory for grasp-eval artefacts (records, plots, csv).")
+    parser.add_argument("--grasp-eval-mu",  type=float, default=1.0,
                         help="Estimated friction coefficient for friction-cone plot annotation.")
     args = parser.parse_args()
 
@@ -405,8 +358,8 @@ def main():
         debug=args.debug,
         debug_log_every=args.debug_log_every,
         seed=args.seed,
-        grasp_debug=args.grasp_debug,
-        grasp_debug_mu=args.grasp_debug_mu,
+        grasp_eval=args.grasp_eval,
+        grasp_eval_mu=args.grasp_eval_mu,
     )
     executor   = Executors.descend
     video_path = args.output
@@ -455,10 +408,10 @@ def main():
     n_ok = sum(1 for _, s, _ in results if s)
     logger.info(f"Success rate: {n_ok}/{len(results)} = {100*n_ok/len(results):.1f}%")
 
-    if exe.grasp_debugger is not None:
-        exe.grasp_debugger.print_summary(log=logger.info)
-        exe.grasp_debugger.dump(args.grasp_debug_out)
-        logger.info(f"Grasp-debug artefacts saved -> {args.grasp_debug_out}")
+    if exe.grasp_evaluator is not None:
+        exe.grasp_evaluator.print_summary(log=logger.info)
+        exe.grasp_evaluator.dump(args.grasp_eval_out)
+        logger.info(f"Grasp-eval artefacts saved -> {args.grasp_eval_out}")
 
 
 if __name__ == "__main__":

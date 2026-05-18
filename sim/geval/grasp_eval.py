@@ -1,149 +1,66 @@
+import mujoco
+import numpy as np
 import csv
 import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
+##
 
-import numpy as np
-import mujoco
+from .metrics import BodyName, JointName, Phase, FailureMode
+from .metrics import PhaseSnapshot, ContactTimeSeries, OrientationTimeSeries, ObjState
 
+from utils.utils import unit, angular_deviation, safe_divide
 
-# -------------------- enums --------------------
+# -------------------- Helpers --------------------
 
-class BodyName(str, Enum):
-    """MuJoCo body names used by the debugger."""
-    HAND         = "hand"
-    LEFT_FINGER  = "left_finger"
-    RIGHT_FINGER = "right_finger"
-
-    def __str__(self):
-        return self.value
-
-    @classmethod
-    def fingers(cls):
-        return (cls.LEFT_FINGER, cls.RIGHT_FINGER)
-
-
-class JointName(str, Enum):
-    """MuJoCo joint names used by the debugger."""
-    FINGER_JOINT1 = "finger_joint1"
-    FINGER_JOINT2 = "finger_joint2"
-
-    def __str__(self):
-        return self.value
-
-
-class Phase(str, Enum):
-    """Named execution phases. Executors call mark_phase(Phase.X)."""
-    INIT     = "init"
-    APPROACH = "approach"
-    CLOSE    = "close"
-    RETREAT  = "retreat"
-    LIFT     = "lift"
-    DONE     = "done"
-
-    def __str__(self):
-        return self.value
-
-
-class FailureMode(str, Enum):
-    """Outcome classes derived from ObjState."""
-    OK                  = "ok"
-    NO_CONTACT_AT_CLOSE = "no_contact_at_close"
-    LOST_DURING_RETREAT = "lost_during_retreat"
-    SLIPPED_DURING_LIFT = "slipped_during_lift"
-
-    def __str__(self):
-        return self.value
-
-
-# -------------------- data model --------------------
-
-@dataclass
-class PhaseSnapshot:
-    """State captured at a phase boundary (start of phase == end of previous)."""
-    t: float
-    phase: str
-    finger_gap: float
-    n_finger_obj_contacts: int
-    hand_pos: np.ndarray
-    obj_pos: Optional[np.ndarray] = None
-    obj_quat: Optional[np.ndarray] = None
-
-
-@dataclass
-class ContactTimeSeries:
-    """Per-step finger <-> target-object contact instrumentation."""
-    t:           List[float] = field(default_factory=list)
-    phase:       List[str]   = field(default_factory=list)
-    n_contacts:  List[int]   = field(default_factory=list)
-    left_fn:     List[float] = field(default_factory=list)
-    left_ft:     List[float] = field(default_factory=list)
-    right_fn:    List[float] = field(default_factory=list)
-    right_ft:    List[float] = field(default_factory=list)
-    finger_gap:  List[float] = field(default_factory=list)
-
-    def __len__(self) -> int:
-        return len(self.t)
-
-    def append_sample(self, *, t, phase, n_contacts,
-                      left_fn, left_ft, right_fn, right_ft, finger_gap):
-        self.t.append(float(t))
-        self.phase.append(str(phase))
-        self.n_contacts.append(int(n_contacts))
-        self.left_fn.append(float(left_fn))
-        self.left_ft.append(float(left_ft))
-        self.right_fn.append(float(right_fn))
-        self.right_ft.append(float(right_ft))
-        self.finger_gap.append(float(finger_gap))
-
-
-@dataclass
-class OrientationTimeSeries:
-    """Per-step world-frame approach and binormal (finger-closing) unit axes of the hand."""
-    t:        List[float]      = field(default_factory=list)
-    phase:    List[str]        = field(default_factory=list)
-    approach: List[np.ndarray] = field(default_factory=list)
-    binormal: List[np.ndarray] = field(default_factory=list)
-
-    def __len__(self) -> int:
-        return len(self.t)
-
-    def append_sample(self, *, t, phase, approach, binormal):
-        self.t.append(float(t))
-        self.phase.append(str(phase))
-        self.approach.append(np.asarray(approach, dtype=np.float64).copy())
-        self.binormal.append(np.asarray(binormal, dtype=np.float64).copy())
-
-    def as_arrays(self):
-        return (np.asarray(self.t),
-                np.asarray(self.approach),   # (N, 3)
-                np.asarray(self.binormal))   # (N, 3)
-
-
-@dataclass
-class ObjState:
+def _phase_tail_contacts(contacts: "ContactTimeSeries",
+                         phase_name: str,
+                         tail_frac: float = 0.2) -> int:
     """
-    Three-stage state of a grasp execution w.r.t. the target object:
-      seated — fingers had contact right after close + settle
-      held   — contact survived the retreat motion
-      lifted — at least one object crossed the lift-height threshold (success)
+    Median # of finger-target contacts over the last `tail_frac` of the samples
+    tagged with `phase_name`. Robust to single-step contact chatter that can
+    make a single-instant snapshot misleadingly read 0 on a grip that was
+    actually stable for the rest of the phase.
     """
-    seated: bool
-    held:   bool
-    lifted: bool
+    n_total = len(contacts)
+    if n_total == 0:
+        return 0
+    indices = [i for i in range(n_total) if contacts.phase[i] == phase_name]
+    if not indices:
+        return 0
+    k = max(1, int(len(indices) * tail_frac))
+    tail = [contacts.n_contacts[i] for i in indices[-k:]]
+    return int(np.median(tail))
 
-    @property
-    def failure_mode(self) -> FailureMode:
-        if self.lifted:
-            return FailureMode.OK
-        if not self.seated:
-            return FailureMode.NO_CONTACT_AT_CLOSE
-        if not self.held:
-            return FailureMode.LOST_DURING_RETREAT
-        return FailureMode.SLIPPED_DURING_LIFT
+def _phase_boundaries(t: np.ndarray, phase_list) -> List[Tuple[float, str]]:
+    """Return [(t_at_boundary, phase_name)] each time the phase label changes."""
+    out, last = [], None
+    for i, p in enumerate(phase_list):
+        if p != last:
+            out.append((float(t[i]), str(p)))
+            last = p
+    return out
 
+def _decorate_axes(axes, boundaries):
+    """Vertical phase markers + grid + rotated phase labels in the top axis."""
+    for ax in axes:
+        for tb, _ in boundaries:
+            ax.axvline(tb, color="gray", alpha=0.4, linestyle="-.")
+        ax.grid(alpha=0.3)
+    if not boundaries:
+        return
+    top = axes[0]
+    ymax = top.get_ylim()[1]
+    if ymax <= 0:
+        ymax = 1.0
+    for tb, ph in boundaries:
+        top.text(tb, ymax * 0.95, ph, rotation=90, fontsize=7,
+                 va="top", ha="right")
+
+
+# -------------------- Grasp Record Class --------------------
 
 @dataclass
 class GraspRecord:
@@ -184,9 +101,9 @@ class GraspRecord:
         return self.state.failure_mode
 
 
-# -------------------- debugger --------------------
+# -------------------- Evaluator --------------------
 
-class GraspDebugger:
+class GraspEvaluator:
     """
     Optional per-grasp instrumentation. Three features:
       (1) Per-step finger↔target-object contact state (count, fn/ft per finger).
@@ -195,7 +112,7 @@ class GraspDebugger:
 
     Lifecycle (driven by GraspHandMocap):
         begin_grasp(...) -> mark_phase(Phase.X)* -> log_step()* -> end_grasp(...)
-    When the debugger is not attached, those calls are skipped at the call site.
+    When the evaluator is not attached, those calls are skipped at the call site.
     """
 
     def __init__(self, model, data, mu_estimate: float = 1.0):
@@ -238,8 +155,8 @@ class GraspDebugger:
             target_bid=int(target_bid),
             t_world=np.asarray(t_world, dtype=np.float64),
             width=float(width),
-            approach_baseline=_unit(approach_baseline),
-            binormal_baseline=_unit(binormal_baseline),
+            approach_baseline=unit(approach_baseline),
+            binormal_baseline=unit(binormal_baseline),
         )
         self._phase = Phase.INIT.value
 
@@ -392,7 +309,7 @@ class GraspDebugger:
     def print_summary(self, log=print):
         rows = self.summary_table()
         if not rows:
-            log("[grasp-debug] no records.")
+            log("[grasp-eval] no records.")
             return
         header = f"{'obj_id':>6} {'n':>4} {'seated':>7} {'held':>5} {'lifted':>7} {'dominant_failure':>26}"
         log(header)
@@ -427,8 +344,8 @@ class GraspDebugger:
         n = min(len(c), len(o))
         A = np.asarray(o.approach[:n]) if n > 0 else np.zeros((0, 3))
         B = np.asarray(o.binormal[:n]) if n > 0 else np.zeros((0, 3))
-        dev_a    = _angular_deviation(A, rec.approach_baseline)
-        dev_b    = _angular_deviation(B, rec.binormal_baseline)
+        dev_a    = angular_deviation(A, rec.approach_baseline)
+        dev_b    = angular_deviation(B, rec.binormal_baseline)
         fn_total = (np.asarray(c.left_fn[:n]) + np.asarray(c.right_fn[:n])
                     if n > 0 else np.zeros(0))
         phases   = np.asarray(c.phase[:n])
@@ -479,7 +396,7 @@ class GraspDebugger:
         l_ft = np.asarray(c.left_ft);  r_ft = np.asarray(c.right_ft)
         fn_sum = l_fn + r_fn
         ft_sum = l_ft + r_ft
-        ratio = _safe_divide(ft_sum, fn_sum)
+        ratio = safe_divide(ft_sum, fn_sum)
 
         fig, axes = plt.subplots(4, 1, figsize=(9, 10), sharex=True)
         axes[0].plot(t, c.n_contacts, "k-")
@@ -522,8 +439,8 @@ class GraspDebugger:
         boundaries = _phase_boundaries(t, o.phase)
 
         a_base, b_base = rec.approach_baseline, rec.binormal_baseline
-        dev_a = _angular_deviation(A, a_base)
-        dev_b = _angular_deviation(B, b_base)
+        dev_a = angular_deviation(A, a_base)
+        dev_b = angular_deviation(B, b_base)
 
         fig, axes = plt.subplots(3, 1, figsize=(9, 10), sharex=True)
         colors = ("tab:red", "tab:green", "tab:blue")
@@ -608,71 +525,3 @@ class GraspDebugger:
         self.plot_all(os.path.join(out_dir, "per_grasp"))
 
 
-# -------------------- helpers --------------------
-
-def _unit(v):
-    if v is None:
-        return None
-    v = np.asarray(v, dtype=np.float64)
-    n = float(np.linalg.norm(v))
-    return (v / n) if n > 1e-12 else v.copy()
-
-def _phase_tail_contacts(contacts: "ContactTimeSeries",
-                         phase_name: str,
-                         tail_frac: float = 0.2) -> int:
-    """
-    Median # of finger-target contacts over the last `tail_frac` of the samples
-    tagged with `phase_name`. Robust to single-step contact chatter that can
-    make a single-instant snapshot misleadingly read 0 on a grip that was
-    actually stable for the rest of the phase.
-    """
-    n_total = len(contacts)
-    if n_total == 0:
-        return 0
-    indices = [i for i in range(n_total) if contacts.phase[i] == phase_name]
-    if not indices:
-        return 0
-    k = max(1, int(len(indices) * tail_frac))
-    tail = [contacts.n_contacts[i] for i in indices[-k:]]
-    return int(np.median(tail))
-
-def _angular_deviation(A: np.ndarray, baseline) -> np.ndarray:
-    """Per-row angle in degrees between unit vectors A[i] and `baseline`."""
-    if baseline is None or A.size == 0:
-        return np.zeros(len(A))
-    norms = np.linalg.norm(A, axis=1, keepdims=True) + 1e-12
-    A_u = A / norms
-    cos = np.clip(A_u @ baseline, -1.0, 1.0)
-    return np.degrees(np.arccos(cos))
-
-def _safe_divide(num: np.ndarray, den: np.ndarray, eps: float = 1e-6) -> np.ndarray:
-    """Element-wise num/den, 0 where |den| <= eps. No divide-by-zero warning."""
-    out = np.zeros_like(den, dtype=np.float64)
-    mask = np.abs(den) > eps
-    out[mask] = num[mask] / den[mask]
-    return out
-
-def _phase_boundaries(t: np.ndarray, phase_list) -> List[Tuple[float, str]]:
-    """Return [(t_at_boundary, phase_name)] each time the phase label changes."""
-    out, last = [], None
-    for i, p in enumerate(phase_list):
-        if p != last:
-            out.append((float(t[i]), str(p)))
-            last = p
-    return out
-
-def _decorate_axes(axes, boundaries):
-    """Vertical phase markers + grid + rotated phase labels in the top axis."""
-    for ax in axes:
-        for tb, _ in boundaries:
-            ax.axvline(tb, color="gray", alpha=0.4, linestyle="-.")
-        ax.grid(alpha=0.3)
-    if not boundaries:
-        return
-    top = axes[0]
-    ymax = top.get_ylim()[1]
-    if ymax <= 0:
-        ymax = 1.0
-    for tb, ph in boundaries:
-        top.text(tb, ymax * 0.95, ph, rotation=90, fontsize=7,
-                 va="top", ha="right")

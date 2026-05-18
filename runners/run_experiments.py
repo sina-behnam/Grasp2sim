@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Grasp experiment runner: per-object isolation vs. combined-scene success rates,
-with per-grasp debug instrumentation.
+with per-grasp evaluation instrumentation.
 
 For each object found in the scene annotation:
   1. Individual  — scene contains only that object; top-N grasps are tested.
@@ -46,8 +46,8 @@ from loguru import logger
 from graspnetAPI import GraspGroup
 
 from manage import config
-from sim.grasp_sim_mocap import GraspHandMocap, Executors
-from sim.logger.grasp_debugger import FailureMode
+from sim.core.simulator import GraspHandMocap, Executors
+from sim.geval.metrics import FailureMode
 from scenes.grasp2scene_mocap import Scene
 from utils.poses import gg_filter_by_object_id, gg_filter_by_width, gg_filter_by_orthogonal_approach
 
@@ -87,15 +87,15 @@ def _prepare_grasps(gg: GraspGroup, obj_id: int, top_n: int) -> GraspGroup:
 
 
 def _make_sim(xml_path: str, camera_extr: str, camera_pose: str,
-              video: bool, grasp_debug: bool,
+              video: bool, grasp_eval: bool,
               overlay_corner: str = 'top_left') -> GraspHandMocap:
     return GraspHandMocap(
         scene_xml=xml_path,
         camera_extr=camera_extr,
         camera_pose=camera_pose,
         render='human' if video else 'off',
-        grasp_debug=grasp_debug,
-        grasp_debug_mu=FRICTION_MU,
+        grasp_eval=grasp_eval,
+        grasp_eval_mu=FRICTION_MU,
         overlay_corner=overlay_corner,
     )
 
@@ -115,17 +115,17 @@ def _classify(success: bool, seated: bool, held: bool, lifted_any: bool) -> str:
 
 def _plot_grasp(sim: GraspHandMocap, rank: int, plot_dir: Path):
     """Save contacts + orientation plots for the latest grasp run on `sim`."""
-    if sim.grasp_debugger is None or not sim.grasp_debugger.records:
+    if sim.grasp_evaluator is None or not sim.grasp_evaluator.records:
         return
 
     import matplotlib.pyplot as plt
     plot_dir.mkdir(parents=True, exist_ok=True)
-    idx = len(sim.grasp_debugger.records) - 1
-    fig = sim.grasp_debugger.plot_grasp(
+    idx = len(sim.grasp_evaluator.records) - 1
+    fig = sim.grasp_evaluator.plot_grasp(
         idx, save_path=str(plot_dir / f"grasp_{rank:03d}_contacts.png"))
     if fig is not None:
         plt.close(fig)
-    fig = sim.grasp_debugger.plot_grasp_orientation(
+    fig = sim.grasp_evaluator.plot_grasp_orientation(
         idx, save_path=str(plot_dir / f"grasp_{rank:03d}_orient.png"))
     if fig is not None:
         plt.close(fig)
@@ -148,7 +148,7 @@ def _run_grasps(sim: GraspHandMocap, sampled: GraspGroup, executor,
         success = (lifted_any if target_obj_name is None
                    else any(name == target_obj_name for name, _ in lifted))
 
-        dbg = sim.grasp_debugger
+        dbg = sim.grasp_evaluator
         if dbg is not None and dbg.records:
             st = dbg.records[-1].state
             seated, held = bool(st.seated), bool(st.held)
@@ -201,7 +201,7 @@ def run_individual(scene: Scene, gg: GraspGroup, obj_ids: list,
         try:
             scene.save_xml(xml_path, obj_indexes=[obj_id], coacd=True, strength='original')
             sim = _make_sim(xml_path, str(CAMERA_EXTR), str(CAMERA_POSE),
-                            video=video, grasp_debug=True,
+                            video=video, grasp_eval=True,
                             overlay_corner=overlay_corner)
             sim.set_overlay_prefix("individual")
 
@@ -240,7 +240,7 @@ def run_combined(scene: Scene, gg: GraspGroup, obj_ids: list,
     try:
         scene.save_xml(xml_path, obj_indexes=None, coacd=True, strength='original')
         sim = _make_sim(xml_path, str(CAMERA_EXTR), str(CAMERA_POSE),
-                        video=video, grasp_debug=True,
+                        video=video, grasp_eval=True,
                         overlay_corner=overlay_corner)
         sim.set_overlay_prefix("combined")
 
