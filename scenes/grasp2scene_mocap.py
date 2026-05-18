@@ -7,6 +7,8 @@ from graspnetAPI.utils.utils import parse_posevector
 from dotenv import load_dotenv, find_dotenv
 import argparse
 
+from loguru import logger
+
 load_dotenv(find_dotenv())
 
 GRASPNET_SCENE_ROOT = os.getenv("SCENE_DIR")
@@ -112,7 +114,7 @@ class Scene:
               </body>''')
             else:
                 if coacd and not part_files:
-                    print(f'[warn] obj {obj_str}: no CoACD parts found, falling back to single mesh')
+                    logger.warning(f'obj {obj_str}: no CoACD parts found, falling back to single mesh')
                 asset_lines.append(
                     f'    <mesh name="mesh_obj_{obj_str}" file="{self.model_dir}/{obj_str}/nontextured.stl"/>'
                 )
@@ -298,7 +300,7 @@ class Scene:
         with open(output_path, 'w') as f:
             f.write(self.shape_xml(obj_indexes, coacd=coacd, strength=strength))
         mode = 'with CoACD collision' if coacd else 'single-mesh collision'
-        print(f'Saved → {output_path}  ({mode}, mocap-weld hand)')
+        logger.info(f'Saved → {output_path}  ({mode}, mocap-weld hand)')
 
 
 def main():
